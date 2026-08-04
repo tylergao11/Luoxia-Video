@@ -1,19 +1,18 @@
 <!-- Banner -->
 <div align="center">
-  <img src="docs/images/LumenX-Studio-Banner-cybr.png" alt="LumenX" width="100%" />
+  <img src="docs/images/LumenX-Studio-Banner-cybr.png" alt="Luoxia-Video" width="100%" />
 </div>
 
 <div align="center">
 
-# LumenX
+# Luoxia-Video
 
-### AI-Native Motion Comic & Video Creation Platform
-**Render Noise into Narrative**
+### 落霞 · 小说转短剧创作平台
+**Novel → Beats → Timeline → Short Drama**
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org/)
-[![GitHub Stars](https://img.shields.io/github/stars/alibaba/lumenx?style=social)](https://github.com/alibaba/lumenx)
 
 [English](README_EN.md) · [中文](README.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
@@ -21,14 +20,13 @@
 
 ---
 
-LumenX 是一个 **AI 原生的短漫剧 & 视频创作平台**。它将创意文本转化为可发布的动态视频，提供从剧本分析到成片导出的完整创作链路，同时支持独立的图像/视频生成能力。
-
-LumenX 目前包含两个核心模块：
+**Luoxia-Video（落霞）** 是一套 **AI 原生的小说转短剧** 全链路产品。调度真源是落霞契约：**beats** 管内容取舍，**timeline** 管 audio-first 时长；应用壳提供剧本、拆分审阅、定妆/资产、分镜出片与合成导出，以及独立 Playground。
 
 | 模块 | 定位 |
 |------|------|
-| **LumenX Studio** | Pipeline-first 漫剧/视频生产（剧本→分镜→资产→视频→合成→导出） |
-| **LumenX Playground** | 独立图像/视频生成工具台（无需剧本上下文，即开即用） |
+| **Pipeline** | 小说/剧本 → 落霞 beats 拆分审阅 → 画风/角色 → 分镜视频 → 合成导出 |
+| **Playground** | 独立图像/视频生成工具台（无需剧本上下文，即开即用） |
+| **CLI（进阶）** | `python -m src.luoxia` 无人值守出片，与应用同一产品、同一契约 |
 
 ---
 
@@ -151,7 +149,7 @@ cd frontend && npm install && npm run dev  # http://localhost:3008
 
 ## ⚙️ 配置模式
 
-LumenX 采用 **本地优先** 的架构，最简配置只需一个 API Key。
+Luoxia-Video 采用 **本地优先** 的架构，最简配置只需一个 API Key。
 
 | 模式 | 必填 | 可用能力 |
 |------|------|----------|
@@ -179,7 +177,7 @@ MuleRun 支持两种认证方式：
 ## 🏗️ 技术架构
 
 <div align="center">
-  <img src="docs/images/architecture-cybr.png" alt="LumenX System Architecture" width="90%" />
+  <img src="docs/images/architecture-cybr.png" alt="Luoxia-Video System Architecture" width="90%" />
 </div>
 
 ### 目录结构

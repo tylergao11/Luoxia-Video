@@ -18,7 +18,7 @@ import { toast } from "@/store/toastStore";
 import { rovingKeyDown } from "@/lib/a11y";
 import { Image, Video, Layout, User, Building, Box } from "lucide-react";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
-import LumenXBranding from "@/components/layout/LumenXBranding";
+import LuoxiaBranding from "@/components/layout/LuoxiaBranding";
 import UpdateChecker from "./UpdateChecker";
 type SettingsCategory = "general" | "models" | "prompts" | "apikeys" | "storage" | "about";
 import {
@@ -660,12 +660,196 @@ export default function SettingsPage() {
     </Section>
   );
 
+  const [authStatus, setAuthStatus] = useState<{
+    mode: string;
+    provider: string;
+    signed_in: boolean;
+    label?: string | null;
+    message: string;
+    providers: Array<{ id: string; display_name: string }>;
+  } | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [pasteToken, setPasteToken] = useState("");
+
+  const refreshAuth = useCallback(async () => {
+    try {
+      const st = await api.getAuthStatus();
+      setAuthStatus(st);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAuth();
+  }, [refreshAuth]);
+
   const renderApiKeys = () => (
     <Section
       id="apikeys"
       title={t("secApiTitle")}
       desc={t("secApiDesc")}
     >
+      {/* Entry-layer auth: session pool (default) / api_key / offline — provider swappable */}
+      <div className="mb-6 p-4 rounded-xl border border-glass-border bg-surface-inset space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">{t("authTitle")}</h3>
+            <p className="text-[0.6875rem] text-text-muted mt-0.5">{t("authDesc")}</p>
+          </div>
+          {authStatus?.signed_in ? (
+            <span className="text-[0.65rem] px-2 py-0.5 rounded-full border border-emerald-500/40 text-emerald-300">
+              {authStatus.label || t("authSignedIn")}
+            </span>
+          ) : (
+            <span className="text-[0.65rem] px-2 py-0.5 rounded-full border border-amber-500/40 text-amber-300">
+              {t("authNeedLogin")}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-text-secondary">{authStatus?.message || t("authLoading")}</p>
+        <FormRow label={t("authMode")} hint={t("authModeHint")}>
+          <ModeSegment
+            value={authStatus?.mode || "session"}
+            onChange={async (v) => {
+              setAuthBusy(true);
+              try {
+                await api.setAuthConfig({ mode: v });
+                await refreshAuth();
+                toast.success(t("authModeSaved"));
+              } catch (err: any) {
+                toast.error(err?.response?.data?.detail || t("authFailed"));
+              } finally {
+                setAuthBusy(false);
+              }
+            }}
+            options={[
+              { id: "session", label: t("authModeSession") },
+              { id: "api_key", label: t("authModeApiKey") },
+              { id: "offline", label: t("authModeOffline") },
+            ]}
+          />
+        </FormRow>
+        {(authStatus?.mode === "session" || !authStatus) && (
+          <>
+            <FormRow label={t("authProvider")} hint={t("authProviderHint")}>
+              <select
+                className={settingsInputClass}
+                value={authStatus?.provider || "xai_pool"}
+                disabled={authBusy}
+                onChange={async (e) => {
+                  setAuthBusy(true);
+                  try {
+                    await api.setAuthConfig({ provider: e.target.value, mode: "session" });
+                    await refreshAuth();
+                  } catch (err: any) {
+                    toast.error(err?.response?.data?.detail?.message || err?.response?.data?.detail || t("authFailed"));
+                  } finally {
+                    setAuthBusy(false);
+                  }
+                }}
+              >
+                {(authStatus?.providers?.length
+                  ? authStatus.providers
+                  : [{ id: "xai_pool", display_name: "xAI subscription pool" }]
+                ).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.display_name} ({p.id})
+                  </option>
+                ))}
+              </select>
+            </FormRow>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={authBusy}
+                onClick={async () => {
+                  setAuthBusy(true);
+                  try {
+                    await api.authLogin({ action: "grok_login" });
+                    await refreshAuth();
+                    toast.success(t("authLoginOk"));
+                  } catch (err: any) {
+                    const d = err?.response?.data?.detail;
+                    toast.error((typeof d === "object" ? d?.message : d) || t("authFailed"));
+                  } finally {
+                    setAuthBusy(false);
+                  }
+                }}
+                className="px-3 py-2 rounded-lg bg-primary text-on-accent text-xs font-medium hover:bg-primary-hover disabled:opacity-50"
+              >
+                {authBusy ? <Loader2 size={14} className="animate-spin inline" /> : null}{" "}
+                {t("authGrokLogin")}
+              </button>
+              <button
+                type="button"
+                disabled={authBusy || !authStatus?.signed_in}
+                onClick={async () => {
+                  setAuthBusy(true);
+                  try {
+                    await api.authLogout();
+                    await refreshAuth();
+                    toast.success(t("authLogoutOk"));
+                  } catch (err: any) {
+                    toast.error(err?.response?.data?.detail || t("authFailed"));
+                  } finally {
+                    setAuthBusy(false);
+                  }
+                }}
+                className="px-3 py-2 rounded-lg border border-glass-border text-xs text-text-secondary hover:bg-hover-bg disabled:opacity-50"
+              >
+                {t("authLogout")}
+              </button>
+              <button
+                type="button"
+                disabled={authBusy}
+                onClick={() => refreshAuth()}
+                className="px-3 py-2 rounded-lg border border-glass-border text-xs text-text-secondary hover:bg-hover-bg"
+              >
+                {t("authRefresh")}
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel>{t("authPasteToken")}</FieldLabel>
+              <input
+                type="password"
+                value={pasteToken}
+                onChange={(e) => setPasteToken(e.target.value)}
+                placeholder="access_token (OAuth session — not xai- API key)"
+                className={settingsInputClass + " w-full"}
+              />
+              <button
+                type="button"
+                disabled={authBusy || !pasteToken.trim()}
+                onClick={async () => {
+                  setAuthBusy(true);
+                  try {
+                    await api.authLogin({ action: "token", access_token: pasteToken.trim() });
+                    setPasteToken("");
+                    await refreshAuth();
+                    toast.success(t("authLoginOk"));
+                  } catch (err: any) {
+                    const d = err?.response?.data?.detail;
+                    toast.error((typeof d === "object" ? d?.message : d) || t("authFailed"));
+                  } finally {
+                    setAuthBusy(false);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg border border-primary/40 text-xs text-primary hover:bg-primary/10 disabled:opacity-50"
+              >
+                {t("authSaveToken")}
+              </button>
+            </div>
+          </>
+        )}
+        {authStatus?.mode === "api_key" && (
+          <p className="text-xs text-text-muted">{t("authApiKeyHint")}</p>
+        )}
+        {authStatus?.mode === "offline" && (
+          <p className="text-xs text-text-muted">{t("authOfflineHint")}</p>
+        )}
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 size={24} className="animate-spin text-primary" />
@@ -943,7 +1127,7 @@ export default function SettingsPage() {
           type="text"
           value={config.OSS_BASE_PATH}
           onChange={(e) => handleChange("OSS_BASE_PATH", e.target.value)}
-          placeholder="lumenx"
+          placeholder="luoxia"
           className={settingsInputClass + " font-mono text-[0.71875rem]"}
         />
       </FormRow>
@@ -973,7 +1157,7 @@ export default function SettingsPage() {
   const renderAbout = () => {
     const ff = system?.ffmpeg;
     const aboutRows: { k: string; v: string; tone?: "ok" | "warn" }[] = [
-      { k: t("aboutAppVersion"), v: `LumenX Studio ${APP_VERSION}` },
+      { k: t("aboutAppVersion"), v: `Luoxia-Video ${APP_VERSION}` },
       { k: t("aboutBackendApi"), v: API_URL },
       { k: t("aboutDataDir"), v: dataDir || "—" },
       { k: t("logDirLabel"), v: logDir || "—" },
@@ -982,7 +1166,7 @@ export default function SettingsPage() {
       <Section id="about" title={t("secAboutTitle")}>
         {/* Line B brand signature block — teal-glow logo, serif name, amber tagline */}
         <div className="flex flex-col items-start gap-3 pb-6 mb-6 border-b border-glass-border">
-          <LumenXBranding size="md" showSlogan={false} />
+          <LuoxiaBranding size="md" showSlogan={false} />
           <p className="font-display atelier-display text-base italic text-accent leading-snug">
             “Render Noise into Narrative”
           </p>

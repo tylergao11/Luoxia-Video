@@ -12,11 +12,11 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 When the user asks to do any of the following in this repository:
 
-- publish to the LumenX GitHub mirror
-- run the LumenX GitHub publish workflow
-- follow the LumenX GitHub release or PR flow
-- prepare a GitHub-safe branch, commit, push, or PR for LumenX
-- use `/lumenx-git-publish`
+- publish to the Luoxia-Video GitHub mirror
+- run the Luoxia-Video GitHub publish workflow
+- follow the Luoxia-Video GitHub release or PR flow
+- prepare a GitHub-safe branch, commit, push, or PR for Luoxia-Video
+- use `/lumenx-git-publish` (legacy alias)
 
 Treat that as a request to load and follow:
 
@@ -24,12 +24,12 @@ Treat that as a request to load and follow:
 
 When the user asks to do any of the following in this repository:
 
-- onboard a new model into LumenX
+- onboard a new model into Luoxia-Video
 - update model docs, model versions, defaults, or parameters
 - refresh Wan / Kling / Vidu / PixVerse model support
-- run the LumenX model onboarding workflow
+- run the Luoxia-Video model onboarding workflow
 - review whether a model change is catalog-only or also needs runtime / UI work
-- use `/lumenx-model-onboarding`
+- use `/lumenx-model-onboarding` (legacy alias)
 
 Treat that as a request to load and follow:
 
@@ -37,17 +37,17 @@ Treat that as a request to load and follow:
 
 When the user asks to do any of the following in this repository:
 
-- build the LumenX desktop app
-- package LumenX Studio for macOS or Windows
+- build the Luoxia-Video desktop app
+- package Luoxia-Video for macOS or Windows
 - create a DMG or EXE build
-- run the LumenX desktop build workflow
-- use `/lumenx-build`
+- run the Luoxia-Video desktop build workflow
+- use `/lumenx-build` (legacy alias)
 
 Treat that as a request to load and follow:
 
 `.codex/workflows/lumenx-build.md`
 
-This repository does not rely on native slash commands in Codex. The strings `/lumenx-git-publish`, `/lumenx-build`, and `/lumenx-model-onboarding` are textual aliases for the workflows above.
+This repository does not rely on native slash commands in Codex. The strings `/lumenx-git-publish`, `/lumenx-build`, and `/lumenx-model-onboarding` are textual aliases for the workflows above (historical command filenames; product name is Luoxia-Video).
 
 ## Workflow Files
 
@@ -60,11 +60,11 @@ This repository does not rely on native slash commands in Codex. The strings `/l
 
 If both Claude and Codex guidance exist, preserve behavior parity unless the user asks for divergence.
 
-# AI Comic Generator Platform
+# Luoxia-Video Platform
 
 ## Overview
 
-The AI Comic Generator is a complete AI-powered comic video production platform that supports the full workflow from script to finished video. It uses Next.js frontend with FastAPI backend, integrating AI services like Qwen from Alibaba Cloud.
+**Luoxia-Video** (落霞) is a novel-to-short-drama product. The short-drama spine is Luoxia contracts: **beats** own keep/drop content selection; **timeline** is the sole audio-first duration authority. The Next.js + FastAPI app is the human shell (script → beats review → cast/assets → storyboard → assembly). Do not brand this product as LumenX; upstream `alibaba/lumenx` is provenance only.
 
 ## Architecture
 
@@ -253,13 +253,13 @@ User project data is stored in `~/.tron/comic/`:
 Primary: independent creators (self-media, short-video makers) who need to turn text scripts into comic-style videos quickly. Secondary: professional teams using it as a pre-production tool. Both share a need for speed and creative control — they think in stories, not in software.
 
 ### Brand Personality
-**Creative · Immersive · Geeky** — LumenX feels like a creator's cockpit, not an admin panel. It respects the user's craft while putting AI power at their fingertips. The tagline "Render Noise into Narrative" captures the mission: raw ideas in, polished stories out.
+**Creative · Immersive · Geeky** — Luoxia-Video feels like a creator's cockpit, not an admin panel. It respects the user's craft while putting AI power at their fingertips. Mission: novel in, short drama out.
 
 ### Aesthetic Direction
 - **Dark-first**: Deep space black (#050508) background, no light mode. The darkness lets content (images, videos, storyboards) be the hero.
 - **Glassmorphism**: Frosted glass panels (5% white + backdrop-blur) for structure. Layered transparency creates depth without clutter.
 - **Neon accents**: Electric blue (#646cff) primary, hot pink (#ff0080) accent. Used sparingly for interactive elements and emphasis — not decoration.
-- **Brand gradient**: Purple → Indigo → Pink (the "X" in LumenX). Reserved for branding moments, not sprinkled everywhere.
+- **Brand gradient**: Purple → Indigo → Pink. Reserved for branding moments, not sprinkled everywhere.
 - **Typography**: Space Grotesk (display/headings — geometric, modern), Inter (body — clean, readable), JetBrains Mono (code/technical values).
 - **Anti-references**: No dense tables/forms that feel like enterprise admin. No excessive particles/animations that distract from content. No multi-panel professional tool complexity (not Figma/Photoshop).
 

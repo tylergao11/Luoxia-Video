@@ -110,7 +110,7 @@ def open_webview():
 
     # 创建 pywebview 窗口
     window = webview.create_window(
-        title="LumenX Studio",
+        title="Luoxia-Video",
         url=f"http://127.0.0.1:17177/static/index.html?timestamp={datetime.now().timestamp()}",
         width=1280,
         height=800,

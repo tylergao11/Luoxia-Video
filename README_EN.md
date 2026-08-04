@@ -1,19 +1,18 @@
 <!-- Banner -->
 <div align="center">
-  <img src="docs/images/LumenX-Studio-Banner-cybr.png" alt="LumenX" width="100%" />
+  <img src="docs/images/LumenX-Studio-Banner-cybr.png" alt="Luoxia-Video" width="100%" />
 </div>
 
 <div align="center">
 
-# LumenX
+# Luoxia-Video
 
-### AI-Native Motion Comic & Video Creation Platform
-**Render Noise into Narrative**
+### Novel-to-Short-Drama Creation Platform
+**Novel → Beats → Timeline → Short Drama**
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org/)
-[![GitHub Stars](https://img.shields.io/github/stars/alibaba/lumenx?style=social)](https://github.com/alibaba/lumenx)
 
 [English](README_EN.md) · [中文](README.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
@@ -21,14 +20,12 @@
 
 ---
 
-LumenX is an **AI-native motion comic & video creation platform**. It transforms creative text into publishable dynamic videos, providing a complete workflow from script analysis to final export, while also supporting standalone image/video generation.
-
-LumenX currently includes two core modules:
+**Luoxia-Video** is an **AI-native novel-to-short-drama** product. Content selection is owned by **beats**; duration is owned solely by **timeline** (audio-first). The app shell covers script input, beats review, cast/assets, storyboard video, and export, plus a standalone Playground. CLI (`python -m src.luoxia`) is an advanced entry under the same product name.
 
 | Module | Purpose |
 |--------|---------|
-| **LumenX Studio** | Pipeline-first comic/video production (Script → Storyboard → Assets → Video → Export) |
-| **LumenX Playground** | Standalone image/video generation workbench (no project context required) |
+| **Pipeline** | Novel/script → Luoxia beats review → style/cast → storyboard video → assembly |
+| **Playground** | Standalone image/video generation workbench (no project context required) |
 
 ---
 
@@ -151,7 +148,7 @@ cd frontend && npm install && npm run dev  # http://localhost:3008
 
 ## ⚙️ Configuration Modes
 
-LumenX uses a **local-first** architecture. The minimal setup requires only one API key.
+Luoxia-Video uses a **local-first** architecture. The minimal setup requires only one API key.
 
 | Mode | Required | Available Capabilities |
 |------|----------|----------------------|
@@ -179,7 +176,7 @@ MuleRun supports two authentication methods:
 ## 🏗️ Architecture
 
 <div align="center">
-  <img src="docs/images/architecture-cybr.png" alt="LumenX System Architecture" width="90%" />
+  <img src="docs/images/architecture-cybr.png" alt="Luoxia-Video System Architecture" width="90%" />
 </div>
 
 ### Directory Structure

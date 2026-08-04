@@ -228,6 +228,61 @@ export const api = {
         return { ...res.data, originalText: res.data.original_text };
     },
 
+    // ── Luoxia spine (beats / timeline) ──
+    luoxiaStatus: async (scriptId: string): Promise<LuoxiaStatus> => {
+        const res = await axios.get(`${API_URL}/projects/${scriptId}/luoxia/status`);
+        return res.data;
+    },
+    luoxiaAnalyze: async (
+        scriptId: string,
+        body: { text?: string; resume?: boolean; max_repair_severity?: string | null } = {}
+    ): Promise<LuoxiaStatus> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/luoxia/analyze`, body);
+        return res.data;
+    },
+    luoxiaSelect: async (
+        scriptId: string,
+        body: {
+            max_repair_severity?: string | null;
+            decisions?: Array<{ beat_id: string; decision?: string; lines?: any[]; summary?: string }>;
+        } = {}
+    ): Promise<LuoxiaStatus> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/luoxia/select`, body);
+        return res.data;
+    },
+    luoxiaBridge: async (
+        scriptId: string,
+        body: { provider?: string; model?: string; budget_usd?: number } = {}
+    ): Promise<{ status: LuoxiaStatus; project: any }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/luoxia/bridge`, body);
+        return res.data;
+    },
+    luoxiaSolve: async (scriptId: string): Promise<{ status: LuoxiaStatus; project: any }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/luoxia/solve`);
+        return res.data;
+    },
+    luoxiaFreeze: async (
+        scriptId: string,
+        body: { budget_usd?: number } = {}
+    ): Promise<LuoxiaStatus> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/luoxia/freeze`, body);
+        return res.data;
+    },
+    luoxiaUploadCastReference: async (
+        scriptId: string,
+        characterId: string,
+        file: File
+    ): Promise<LuoxiaStatus> => {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await axios.post(
+            `${API_URL}/projects/${scriptId}/luoxia/cast/${encodeURIComponent(characterId)}/reference`,
+            form,
+            { headers: { "Content-Type": "multipart/form-data" } }
+        );
+        return res.data;
+    },
+
     deleteProject: async (scriptId: string) => {
         const res = await axios.delete(`${API_URL}/projects/${scriptId}`);
         return res.data;
@@ -1184,6 +1239,46 @@ export const api = {
         return res.data;
     },
 
+    // ── Entry-layer auth (subscription pool vs API key vs offline) ──
+    getAuthStatus: async (): Promise<{
+        mode: string;
+        provider: string;
+        signed_in: boolean;
+        label?: string | null;
+        message: string;
+        providers: Array<{ id: string; display_name: string }>;
+        detail?: Record<string, unknown>;
+    }> => {
+        const res = await axios.get(`${API_URL}/auth/status`);
+        return res.data;
+    },
+    getAuthConfig: async (): Promise<{
+        mode: string;
+        provider: string;
+        providers: Array<{ id: string; display_name: string }>;
+    }> => {
+        const res = await axios.get(`${API_URL}/auth/config`);
+        return res.data;
+    },
+    setAuthConfig: async (body: { mode?: string; provider?: string }) => {
+        const res = await axios.put(`${API_URL}/auth/config`, body);
+        return res.data;
+    },
+    authLogin: async (body: {
+        action?: string;
+        access_token?: string;
+        refresh_token?: string;
+        expires_at?: string;
+        email?: string;
+    } = {}) => {
+        const res = await axios.post(`${API_URL}/auth/login`, body);
+        return res.data;
+    },
+    authLogout: async () => {
+        const res = await axios.post(`${API_URL}/auth/logout`);
+        return res.data;
+    },
+
     triggerMulerunLogin: async () => {
         const res = await axios.post(`${API_URL}/config/mulerun-login`);
         return res.data;
@@ -1633,6 +1728,70 @@ export interface PlaygroundTemplateResponse {
   created_at: string;
   updated_at: string;
 }
+
+// ─── Luoxia-Video short-drama spine ─────────────────────────────────────────
+
+export interface LuoxiaBeatLine {
+  character_id?: string;
+  text?: string;
+  delivery?: string;
+  shot_size?: string;
+  line_type?: string;
+}
+
+export interface LuoxiaBeat {
+  beat_id: string;
+  index?: number;
+  summary?: string;
+  beat_type?: string;
+  intensity?: number;
+  decision?: "keep" | "compress" | "drop" | string;
+  drop_reason?: string | null;
+  lines?: LuoxiaBeatLine[];
+  source_span?: { start_char?: number; end_char?: number; excerpt?: string };
+  scene_id?: string;
+}
+
+export interface LuoxiaStatus {
+  work_id?: string;
+  episode_id?: string;
+  beats_path?: string | null;
+  timeline_path?: string | null;
+  beats_phase?: string;
+  timeline_phase?: string;
+  title?: string;
+  quality?: {
+    repair_count?: number;
+    worst_severity?: string | null;
+    invented_lines?: number;
+    truncated_lines?: number;
+    by_severity?: Record<string, number>;
+  };
+  beats?: LuoxiaBeat[];
+  episodes?: any[];
+  cast?: any[];
+  repairs?: any[];
+  shots?: Array<{
+    shot_id: string;
+    index?: number;
+    type?: string;
+    timing_driver?: string;
+    request_duration_s?: number | null;
+    target_duration_s?: number | null;
+    dialogue?: { text?: string; character_id?: string };
+    still_status?: string;
+    still_url?: string | null;
+    video_status?: string;
+    video_url?: string | null;
+    audio_url?: string | null;
+  }>;
+  final_video_url?: string | null;
+  cost?: { budget_ceiling_usd?: number; estimated_usd?: number; [k: string]: any };
+  has_beats?: boolean;
+  has_timeline?: boolean;
+}
+
+// Extend the main api object below via assignment after definition — see luoxia methods on `api`.
 
 export const playgroundApi = {
   generate: (data: PlaygroundGenerateRequest) =>

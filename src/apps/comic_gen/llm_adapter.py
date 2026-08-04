@@ -22,41 +22,103 @@ logger = logging.getLogger(__name__)
 
 
 class LLMAdapter:
-    """Unified LLM call interface supporting DashScope and OpenAI-compatible APIs."""
+    """Unified LLM call interface supporting DashScope and OpenAI-compatible APIs.
+
+    Entry-layer auth (``src.auth``): when LUOXIA_AUTH_MODE=session and provider
+    is xai_pool (or another session adapter), chat can use the session token
+    against an OpenAI-compatible base URL — no pasted pay-per-call API key.
+    """
 
     def __init__(self):
         self.provider = os.getenv("LLM_PROVIDER", "dashscope").lower()
         self._client = None
+        self._client_key = None
         logger.info(f"LLM Adapter initialized with provider: {self.provider}")
 
     @property
     def is_configured(self) -> bool:
+        try:
+            from src.auth.config import load_auth_config
+            from src.auth.resolver import resolve_credential
+
+            cfg = load_auth_config()
+            if cfg.mode == "offline":
+                return False
+            if cfg.mode == "session":
+                try:
+                    resolve_credential(config=cfg, purpose="llm")
+                    return True
+                except Exception:
+                    return False
+        except Exception:
+            pass
         if self.provider == "openai":
             return bool(os.getenv("OPENAI_API_KEY"))
         return bool(os.getenv("DASHSCOPE_API_KEY"))
 
     def _get_client(self):
         """Get or create the OpenAI-compatible client (lazy, cached)."""
-        if self._client is None:
+        api_key, base_url, cache_key = self._resolve_llm_transport()
+        if self._client is None or self._client_key != cache_key:
             try:
                 from openai import OpenAI
             except ImportError:
                 raise RuntimeError(
                     "openai package not installed. Run: pip install openai>=1.0.0"
                 )
-
-            if self.provider == "openai":
-                self._client = OpenAI(
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-                )
-            else:
-                # DashScope uses OpenAI-compatible endpoint
-                self._client = OpenAI(
-                    api_key=os.getenv("DASHSCOPE_API_KEY"),
-                    base_url=f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1",
-                )
+            self._client = OpenAI(api_key=api_key, base_url=base_url)
+            self._client_key = cache_key
         return self._client
+
+    def _resolve_llm_transport(self):
+        """Return (api_key, base_url, cache_key) via auth entry layer when applicable."""
+        try:
+            from src.auth.config import load_auth_config
+            from src.auth.errors import AuthError, LoginRequiredError
+            from src.auth.resolver import resolve_credential
+
+            cfg = load_auth_config()
+            if cfg.mode == "offline":
+                raise RuntimeError(
+                    "Auth mode is offline — LLM cloud calls disabled."
+                )
+            if cfg.mode == "session":
+                try:
+                    resolved = resolve_credential(config=cfg, purpose="llm")
+                    token = resolved.credential.token
+                    base = (
+                        resolved.credential.base_url
+                        or os.getenv("OPENAI_BASE_URL")
+                        or "https://api.x.ai/v1"
+                    )
+                    # Session pool chat: force openai-compatible transport.
+                    self.provider = "openai"
+                    return token, base.rstrip("/"), f"session:{cfg.provider}:{token[:12]}"
+                except LoginRequiredError as e:
+                    raise RuntimeError(str(e)) from e
+                except AuthError as e:
+                    raise RuntimeError(str(e)) from e
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.debug("auth resolver skipped for LLM: %s", e)
+
+        if self.provider == "openai":
+            key = os.getenv("OPENAI_API_KEY")
+            if not key:
+                raise RuntimeError(
+                    "Need login for subscription pool, or set OPENAI_API_KEY / switch auth mode."
+                )
+            base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+            return key, base, f"openai:{key[:8]}"
+        key = os.getenv("DASHSCOPE_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "Need login for subscription pool, or set DASHSCOPE_API_KEY / "
+                "LUOXIA_AUTH_MODE=session + login."
+            )
+        base = f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1"
+        return key, base, f"dashscope:{key[:8]}"
 
     # DashScope qwen 系列：首选 qwen3.7-plus（最新），不可用时回退到 qwen3.6-plus，
     # 最终回退到 qwen-plus alias（始终指向最新稳定通用版）。
@@ -65,7 +127,8 @@ class LLMAdapter:
 
     def _get_default_model(self) -> str:
         if self.provider == "openai":
-            return os.getenv("OPENAI_MODEL", "gpt-4o")
+            # Session pool (xAI) often uses grok-* chat models when OPENAI_MODEL unset.
+            return os.getenv("OPENAI_MODEL") or os.getenv("LUOXIA_POOL_CHAT_MODEL") or "grok-4"
         return self._DASHSCOPE_MODEL_FALLBACK_CHAIN[0]
 
     def chat(

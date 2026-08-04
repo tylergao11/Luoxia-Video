@@ -48,7 +48,11 @@ register_pricing("xai", _pricing)
 class GrokVideoModel(VideoGenModel):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.api_key = config.get("api_key") or os.getenv("XAI_API_KEY", "")
+        # Prefer explicit config key; otherwise resolve lazily on first request
+        # so constructing the adapter does not require login (factory / UI).
+        self.api_key = (config.get("api_key") or "").strip()
+        self._auth_kind = "api_key" if self.api_key else None
+        self._lazy_base: Optional[str] = None
         params = config.get("params") or {}
         self.model_name = params.get("model_name") or config.get("model_name") or _DEFAULT_MODEL
         self.poll_interval_s = float(config.get("poll_interval_s") or 5)
@@ -115,7 +119,17 @@ class GrokVideoModel(VideoGenModel):
 
     def _headers(self) -> Dict[str, str]:
         if not self.api_key:
-            raise RuntimeError("XAI_API_KEY is not configured")
+            token, kind, base = _resolve_xai_token()
+            self.api_key = token
+            self._auth_kind = kind
+            if base:
+                self.base_url = base.rstrip("/")
+        if not self.api_key:
+            raise RuntimeError(
+                "Need login for subscription pool (not an API key). "
+                "Use Settings → Auth, or POST /auth/login — "
+                "or switch LUOXIA_AUTH_MODE=api_key and set XAI_API_KEY."
+            )
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -215,6 +229,58 @@ class GrokVideoModel(VideoGenModel):
         Path(path).unlink(missing_ok=True)
         Path(tmp).replace(path)
         return path
+
+
+def _resolve_xai_token() -> Tuple[str, Optional[str], Optional[str]]:
+    """Return (token, kind, base_url) via pluggable auth entry layer."""
+    from src.auth.config import load_auth_config
+    from src.auth.errors import AuthError, LoginRequiredError
+    from src.auth.resolver import resolve_credential
+
+    try:
+        cfg = load_auth_config()
+    except Exception:
+        cfg = None
+
+    # Legacy / unit-test path: explicit XAI_API_KEY always usable when set,
+    # unless session mode is active without allowing key fallback.
+    env_key = (os.getenv("XAI_API_KEY") or "").strip()
+
+    try:
+        if cfg is None:
+            if env_key:
+                return env_key, "api_key", None
+            raise RuntimeError("Need login for subscription pool (not an API key).")
+
+        if cfg.mode == "offline":
+            raise RuntimeError(
+                "Auth mode is offline — cloud video disabled (use still-hold)."
+            )
+        if cfg.mode == "api_key":
+            if not env_key:
+                raise RuntimeError(
+                    "API-key mode: set XAI_API_KEY, or switch LUOXIA_AUTH_MODE=session and login."
+                )
+            return env_key, "api_key", None
+        # session mode
+        try:
+            resolved = resolve_credential(config=cfg, purpose="video")
+            base = resolved.credential.base_url
+            return resolved.credential.token, resolved.credential.kind, base
+        except LoginRequiredError:
+            raise
+    except LoginRequiredError as e:
+        raise RuntimeError(str(e)) from e
+    except AuthError as e:
+        if env_key and cfg and cfg.mode != "session":
+            return env_key, "api_key", None
+        raise RuntimeError(str(e)) from e
+    except RuntimeError:
+        raise
+    except Exception:
+        if env_key:
+            return env_key, "api_key", None
+        raise
 
 
 class GrokGenerationError(RuntimeError):

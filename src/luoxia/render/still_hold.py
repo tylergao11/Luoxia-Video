@@ -37,8 +37,10 @@ def render_still_hold_videos(timeline: Dict[str, Any], *, output_root: Path | st
             str(still_path),
             "-t",
             str(duration),
+            # Even dimensions required by yuv420p/libx264; clamp to ≥2 so 1×1 stills
+            # (tests / placeholders) do not collapse to 0×0 (ffmpeg error -22).
             "-vf",
-            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            "scale=max(2\\,trunc(iw/2)*2):max(2\\,trunc(ih/2)*2)",
             "-c:v",
             "libx264",
             "-pix_fmt",

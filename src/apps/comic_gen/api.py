@@ -52,7 +52,7 @@ from ...utils import setup_logging
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv, set_key
 
-app = FastAPI(title="AI Comic Gen API")
+app = FastAPI(title="Luoxia-Video API")
 logger = logging.getLogger(__name__)
 
 # Setup logging to user directory
@@ -208,6 +208,115 @@ def health_check():
         "log_dir": log_dir,
         "studio_projects": len(getattr(pipeline, "scripts", {})),
     }
+
+
+# ============================================================
+# Entry-layer auth (pluggable subscription pool / api_key / offline)
+# ============================================================
+
+class AuthConfigUpdate(BaseModel):
+    mode: Optional[str] = None  # session | api_key | offline
+    provider: Optional[str] = None  # e.g. xai_pool — swappable later
+
+
+class AuthLoginRequest(BaseModel):
+    action: Optional[str] = "grok_login"  # grok_login | token (import_doggy kept as alias)
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    expires_at: Optional[str] = None
+    email: Optional[str] = None
+    user_id: Optional[str] = None
+
+
+@app.get("/auth/status")
+def auth_status_endpoint():
+    """Signed-in state for the active auth mode/provider (no raw tokens)."""
+    from src.auth.resolver import status as _auth_status
+
+    st = _auth_status()
+    return {
+        "mode": st.mode,
+        "provider": st.provider,
+        "signed_in": st.signed_in,
+        "label": st.label,
+        "message": st.message,
+        "providers": st.providers,
+        "detail": {k: v for k, v in (st.detail or {}).items() if k not in {"access_token", "refresh_token", "token"}},
+    }
+
+
+@app.get("/auth/config")
+def auth_get_config():
+    from src.auth.config import load_auth_config
+    from src.auth.registry import list_providers
+
+    cfg = load_auth_config()
+    return {"mode": cfg.mode, "provider": cfg.provider, "providers": list_providers()}
+
+
+@app.put("/auth/config")
+def auth_put_config(body: AuthConfigUpdate):
+    """Switch auth mode / pool provider at the entry — does not rewrite pipeline."""
+    from src.auth.config import AuthConfig, load_auth_config, save_auth_config
+    from src.auth.registry import list_provider_ids
+
+    cfg = load_auth_config()
+    mode = (body.mode or cfg.mode).strip().lower()
+    provider = (body.provider or cfg.provider).strip()
+    if mode not in ("session", "api_key", "offline"):
+        raise HTTPException(status_code=400, detail="mode must be session|api_key|offline")
+    known = list_provider_ids()
+    if mode == "session" and provider not in known:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown provider '{provider}'. Known: {', '.join(known)}",
+        )
+    saved = save_auth_config(AuthConfig(mode=mode, provider=provider))
+    return {"mode": saved.mode, "provider": saved.provider, "providers": list_providers_safe()}
+
+
+def list_providers_safe():
+    from src.auth.registry import list_providers
+    return list_providers()
+
+
+@app.post("/auth/login")
+def auth_login(body: AuthLoginRequest = AuthLoginRequest()):
+    """Login against the configured pool provider (Grok login or paste token)."""
+    from src.auth.config import load_auth_config
+    from src.auth.errors import AuthError, LoginRequiredError
+    from src.auth.registry import get_provider
+
+    cfg = load_auth_config()
+    if cfg.mode == "offline":
+        raise HTTPException(status_code=400, detail="offline mode — login not applicable")
+    if cfg.mode == "api_key":
+        raise HTTPException(
+            status_code=400,
+            detail="api_key mode uses env keys in Settings — switch mode to session for pool login",
+        )
+    provider = get_provider(cfg.provider)
+    payload = body.dict(exclude_none=True)
+    try:
+        result = provider.login(payload)
+        return {"ok": True, "status": result}
+    except LoginRequiredError as e:
+        raise HTTPException(status_code=401, detail={"code": e.code, "message": str(e)})
+    except AuthError as e:
+        raise HTTPException(status_code=400, detail={"code": e.code, "message": str(e)})
+
+
+@app.post("/auth/logout")
+def auth_logout():
+    from src.auth.config import load_auth_config
+    from src.auth.registry import get_provider
+
+    cfg = load_auth_config()
+    try:
+        get_provider(cfg.provider).logout()
+    except Exception as e:
+        logger.warning("logout: %s", e)
+    return {"ok": True}
 
 
 @app.get("/diagnose/log_tail")
@@ -427,6 +536,182 @@ async def extract_preview(script_id: str, request: ReparseProjectRequest):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# Luoxia-Video short-drama spine (beats + timeline)
+# ============================================================
+
+from . import luoxia_service as _luoxia
+
+
+class LuoxiaAnalyzeRequest(BaseModel):
+    text: Optional[str] = None
+    resume: bool = False
+    max_repair_severity: Optional[str] = "medium"
+
+
+class LuoxiaSelectRequest(BaseModel):
+    max_repair_severity: Optional[str] = "medium"
+    decisions: Optional[List[Dict[str, Any]]] = None
+
+
+class LuoxiaBridgeRequest(BaseModel):
+    provider: str = "xai"
+    model: str = "grok-imagine-video-1.5"
+    budget_usd: float = 10.0
+
+
+class LuoxiaFreezeRequest(BaseModel):
+    budget_usd: Optional[float] = None
+
+
+def _luoxia_script(script_id: str) -> Script:
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return script
+
+
+@app.get("/projects/{script_id}/luoxia/status")
+def luoxia_status(script_id: str):
+    """Beats + timeline status, quality ledger, and media URLs for the pipeline UI."""
+    script = _luoxia_script(script_id)
+    return _luoxia.public_status(script)
+
+
+@app.post("/projects/{script_id}/luoxia/analyze")
+def luoxia_analyze(script_id: str, request: LuoxiaAnalyzeRequest = LuoxiaAnalyzeRequest()):
+    """Novel/script → slice/score/select beats (content authority)."""
+    script = _luoxia_script(script_id)
+    if request.text is not None and request.text.strip():
+        script.original_text = request.text
+        script.updated_at = time.time()
+        pipeline._save_data()
+    try:
+        status = _luoxia.analyze_project_text(
+            script,
+            text=request.text,
+            resume=request.resume,
+            max_repair_severity=request.max_repair_severity,
+        )
+        return status
+    except _luoxia.StrictRepairError as e:
+        # Still return status so UI can show quality ledger; HTTP 422 signals the gate.
+        status = _luoxia.public_status(script)
+        raise HTTPException(
+            status_code=422,
+            detail={"message": str(e), "status": status},
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("luoxia analyze failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/projects/{script_id}/luoxia/select")
+def luoxia_select(script_id: str, request: LuoxiaSelectRequest = LuoxiaSelectRequest()):
+    """Apply human keep/drop overrides and re-select/pack episodes."""
+    script = _luoxia_script(script_id)
+    try:
+        return _luoxia.select_project_beats(
+            script,
+            max_repair_severity=request.max_repair_severity,
+            decisions=request.decisions,
+        )
+    except _luoxia.StrictRepairError as e:
+        status = _luoxia.public_status(script)
+        raise HTTPException(status_code=422, detail={"message": str(e), "status": status})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("luoxia select failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/projects/{script_id}/luoxia/bridge")
+def luoxia_bridge(script_id: str, request: LuoxiaBridgeRequest = LuoxiaBridgeRequest()):
+    """Selected beats → draft timeline; sync frames/cast onto the project."""
+    script = _luoxia_script(script_id)
+    try:
+        status, updated = _luoxia.bridge_to_timeline(
+            script,
+            provider=request.provider,
+            model=request.model,
+            budget_usd=request.budget_usd,
+        )
+        pipeline.scripts[script_id] = updated
+        pipeline._save_data()
+        return {"status": status, "project": signed_response(updated)}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except _luoxia.BridgeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("luoxia bridge failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/projects/{script_id}/luoxia/solve")
+def luoxia_solve(script_id: str):
+    """TTS measure + audio-first timing solve (timeline duration authority)."""
+    script = _luoxia_script(script_id)
+    try:
+        status, updated = _luoxia.solve_audio(script)
+        pipeline.scripts[script_id] = updated
+        pipeline._save_data()
+        return {"status": status, "project": signed_response(updated)}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("luoxia solve failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/projects/{script_id}/luoxia/freeze")
+def luoxia_freeze(script_id: str, request: LuoxiaFreezeRequest = LuoxiaFreezeRequest()):
+    """Cost gate + freeze timeline before expensive video generation."""
+    script = _luoxia_script(script_id)
+    try:
+        return _luoxia.freeze_episode(script, budget_usd=request.budget_usd)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except _luoxia.BudgetExceededError as e:
+        raise HTTPException(status_code=402, detail=str(e))
+    except Exception as e:
+        logger.exception("luoxia freeze failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/projects/{script_id}/luoxia/cast/{character_id}/reference")
+def luoxia_upload_cast_reference(
+    script_id: str,
+    character_id: str,
+    file: UploadFile = File(...),
+):
+    """Replace a cast reference portrait (lock-face source)."""
+    script = _luoxia_script(script_id)
+    ext = os.path.splitext(file.filename or "ref.png")[1].lower() or ".png"
+    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+        raise HTTPException(status_code=415, detail="image only: jpg/png/webp")
+    tmp_dir = os.path.join("output", "uploads")
+    os.makedirs(tmp_dir, exist_ok=True)
+    tmp_path = os.path.join(tmp_dir, f"cast_ref_{uuid.uuid4().hex}{ext}")
+    try:
+        with open(tmp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        status = _luoxia.update_cast_reference(script, character_id, tmp_path)
+        pipeline.scripts[script_id] = script
+        pipeline._save_data()
+        return status
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("cast reference upload failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3902,6 +4187,22 @@ def get_env_config():
             for field in SECRET_FIELDS
         }
 
+        # Entry-layer auth summary (no tokens)
+        auth_block = {}
+        try:
+            from src.auth.resolver import status as _auth_status
+            st = _auth_status()
+            auth_block = {
+                "auth_mode": st.mode,
+                "auth_provider": st.provider,
+                "auth_signed_in": st.signed_in,
+                "auth_label": st.label,
+                "auth_message": st.message,
+                "auth_providers": st.providers,
+            }
+        except Exception as exc:
+            auth_block = {"auth_mode": "session", "auth_message": str(exc)}
+
         return {
             # Masked secrets — never plaintext.
             "DASHSCOPE_API_KEY": _mask_secret(os.getenv("DASHSCOPE_API_KEY")),
@@ -3922,6 +4223,7 @@ def get_env_config():
             "PIXVERSE_PROVIDER_MODE": _normalize_provider_mode(os.getenv("PIXVERSE_PROVIDER_MODE")),
             "endpoint_overrides": endpoint_overrides,
             "secrets_configured": secrets_configured,
+            **auth_block,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

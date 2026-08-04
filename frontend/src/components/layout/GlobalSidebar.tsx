@@ -3,7 +3,7 @@
 import { LayoutGrid, Layers, Wand2, Settings } from "lucide-react";
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
-import LumenXBranding from "./LumenXBranding";
+import LuoxiaBranding from "./LuoxiaBranding";
 
 export type GlobalTab = "workspace" | "library" | "playground" | "settings";
 
@@ -66,7 +66,7 @@ function NavButton({
 /**
  * 全局导航 —— 带文字标签的品牌侧栏（Line B "Luminous Atelier"）。
  *
- * 顶部常驻 Logo + LUMENX 字标 + Slogan；主导航图标+文字（无 hover、无歧义）；
+ * 顶部常驻 Logo + Luoxia-Video 字标 + Slogan；主导航图标+文字（无 hover、无歧义）；
  * 设置固定底部；底部版本号。早先为给二级筛选栏腾地的 60px 图标轨已废弃——
  * 资产库/设置改走横向筛选后，竖向只剩这一条栏，故恢复完整品牌呈现。
  * 结构对所有主题统一，视觉身份由语义 token 切换（zero-leak）。
@@ -81,14 +81,14 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
 
   return (
     <aside className="w-52 flex-shrink-0 h-full hidden md:flex flex-col border-r border-glass-border bg-surface/60 backdrop-blur-xl">
-      {/* Brand lockup — Logo + LUMENX + Slogan, click → workspace */}
+      {/* Brand lockup — Logo + Luoxia-Video + Slogan, click → workspace */}
       <button
         type="button"
         onClick={() => handleNav("workspace", "#/")}
         aria-label={t("workspaceAria")}
         className="text-left px-4 pt-5 pb-4 border-b border-glass-border hover:opacity-90 transition-opacity"
       >
-        <LumenXBranding size="md" showSlogan={false} />
+        <LuoxiaBranding size="md" showSlogan={false} />
         <p className="font-display atelier-display text-[0.75rem] italic text-text-muted tracking-wide leading-snug mt-2.5">
           Render Noise into Narrative
         </p>

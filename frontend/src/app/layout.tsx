@@ -10,11 +10,11 @@ export default function RootLayout({
   return (
     <html lang="zh" className="atelier-dark" suppressHydrationWarning>
       <head>
-        <title>LumenX Studio</title>
-        <meta name="description" content="AI-Native Motion Comic Creation Platform" />
+        <title>Luoxia-Video</title>
+        <meta name="description" content="Luoxia-Video · Novel to short-drama creation platform" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var P=["atelier-dark","bridge-dark","brand-dark","atelier-light","brand-light"];var d=JSON.parse(localStorage.getItem("lumenx-settings")||"{}");var t=d.state&&d.state.theme;document.documentElement.className=P.indexOf(t)>=0?t:"atelier-dark";}catch(e){document.documentElement.className="atelier-dark";}})();`,
+            __html: `(function(){try{var P=["atelier-dark","bridge-dark","brand-dark","atelier-light","brand-light"];var d=JSON.parse(localStorage.getItem("luoxia-settings")||localStorage.getItem("lumenx-settings")||"{}");var t=d.state&&d.state.theme;document.documentElement.className=P.indexOf(t)>=0?t:"atelier-dark";}catch(e){document.documentElement.className="atelier-dark";}})();`,
           }}
         />
       </head>
