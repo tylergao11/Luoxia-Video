@@ -18,7 +18,13 @@ def selection_fingerprint(beats_doc: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "start_char": span.get("start_char"),
                 "end_char": span.get("end_char"),
                 "lines": [
-                    {"character_id": ln.get("character_id"), "text": ln.get("text")}
+                    {
+                        "character_id": ln.get("character_id"),
+                        "text": ln.get("text"),
+                        "delivery": ln.get("delivery"),
+                        "performance": ln.get("performance"),
+                        "line_type": ln.get("line_type"),
+                    }
                     for ln in (beat.get("lines") or [])
                 ],
             }

@@ -167,6 +167,10 @@ def _solve_pinned(
             dialogue["source_text"] = dialogue.get("source_text") or dialogue.get("text")
             dialogue["text"] = rewrite(dialogue["text"], avail, shot)
             dialogue["rewrite_count"] = int(dialogue.get("rewrite_count") or 0) + 1
+            # Character-span plans belong to the exact pre-rewrite text.  Never slide
+            # stale offsets onto different words; the legacy intent will be recompiled
+            # conservatively for the rewritten take.
+            dialogue["performance"] = None
             measured, path, digest = synthesize(shot, speed)
             audio.update({"measured_duration_s": measured, "local_path": path, "sha256": digest})
             if measured > avail + 1e-6:
@@ -252,6 +256,7 @@ def _solve_audio(
             dialogue["source_text"] = dialogue.get("source_text") or dialogue.get("text")
             dialogue["text"] = rewrite(dialogue["text"], speech_budget, shot)
             dialogue["rewrite_count"] = int(dialogue.get("rewrite_count") or 0) + 1
+            dialogue["performance"] = None
             if synthesize is None:
                 raise SolverError("rewrite requires synthesize callback")
             measured, path, digest = synthesize(shot, 1.0)
@@ -309,8 +314,14 @@ def _split_shot(shot: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "source_text": (shot.get("dialogue") or {}).get("source_text")
                 or (shot.get("dialogue") or {}).get("text"),
                 "rewrite_count": (shot.get("dialogue") or {}).get("rewrite_count") or 0,
+                "performance": None,
             },
-            "audio": {"status": "pending"},
+            "audio": {
+                "status": "pending",
+                "provider": (shot.get("audio") or {}).get("provider"),
+                "voice_id": (shot.get("audio") or {}).get("voice_id"),
+                "take_id": (shot.get("audio") or {}).get("take_id"),
+            },
             "timing": {
                 "resolution_branch": "split_shot",
                 "trim": {"strategy": "tail", "head_s": 0.0, "tail_s": 0.0},

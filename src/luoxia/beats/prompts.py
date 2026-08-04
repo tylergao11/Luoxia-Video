@@ -25,6 +25,7 @@ ANALYZE_SYSTEM = """你是短剧改编总监。原文已按段落编号给你，
 8. character_id 只用小写字母数字下划线；voice_id 从给定清单里选。
 9. 镜头调度：每个 beat 必须给一个镜头序列（visuals + lines 交织），规则见下方「镜头调度」一节。
 10. 只输出一个 JSON 对象，不要解释文字。
+11. 表演调度：每句台词都写 performance。它不是“悲伤/愤怒”标签，而是导演给演员的局部走向；segments[].text 必须逐字复制本句台词中的连续片段。每个片段最多一个 style，全句最多一个 event_before，禁止给整句堆多个效果。
 
 镜头调度（这一节决定成片像剧还是像轮流说话，务必照做）：
 
@@ -76,7 +77,7 @@ ANALYZE_USER_TEMPLATE = """作品 work_id={work_id}
     {{
       "character_id": "lin_wan",
       "display_name": "林晚",
-      "voice_id": "luna",
+      "voice_id": "qwen3-young-female",
       "role": "protagonist",
       "appearance": "二十五岁女性，黑色长发挽起，旧灰呢外套，眼神清冷。只写长期固定外形，不写表情动作。",
       "aliases": ["林家大小姐"]
@@ -95,8 +96,18 @@ ANALYZE_USER_TEMPLATE = """作品 work_id={work_id}
       "lines": [
         {{
           "character_id": "shen_ce",
-          "text": "口语台词",
-          "delivery": "情绪提示",
+          "text": "你们以为，我还是三年前那个任你们摆布的人吗？",
+          "delivery": "演员能理解的整句表演意图，例如先克制质问，最后冷静决绝",
+          "performance": {{
+            "intent": "先克制，再逐渐压迫，收尾咬字清楚",
+            "segments": [
+              {{
+                "text": "我还是三年前那个任你们摆布的人吗？",
+                "style": "build-intensity",
+                "event_before": "pause"
+              }}
+            ]
+          }},
           "shot_size": "medium",
           "line_type": "dialogue"
         }}
@@ -128,6 +139,9 @@ ANALYZE_USER_TEMPLATE = """作品 work_id={work_id}
 - para_start/para_end 必须落在 {para_lo}–{para_hi} 之内，且逐个 beat 递增不重叠。
 - beat_id 用 b001, b002… 连续编号。
 - intensity>=6.5 的段必须写 lines，否则该段会被程序补一句机械台词，质量很差。
+- performance.style 只能用 soft, whisper, loud, build-intensity, decrease-intensity, higher-pitch, lower-pitch, slow, fast, laugh-speak, emphasis 或 null。
+- performance.event_before 只在剧情确实需要时使用 pause, long-pause, breath, inhale, exhale, sigh, chuckle 或 null；“悲伤/哽咽”不等于自动插入 cry。
+- performance.segments 最多 4 段、按台词先后排列、不得重叠。要表达“开头克制、问句渐强、最后决绝”，就选三个不同的原文片段，不要让三个标签套住整句。
 - cast 里每个角色都要写 appearance，它会被用来生成定妆图，决定全片是否换脸。
 - visuals 里的 after_line 必须逐个不减（0,0,1,1,2…），这就是镜头的播放顺序。
 - reaction 镜头的 subject 必填，且必须是 cast 里的 character_id。

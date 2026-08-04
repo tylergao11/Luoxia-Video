@@ -9,8 +9,8 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0"],
-      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/04-BEATS-CONTRACT.md 记录迁移方式。1.1.0 新增可选的 global.coverage 与 beats[].visuals（镜头调度），1.0.0 文件继续有效。"
+      "enum": ["1.0.0", "1.1.0", "1.2.0"],
+      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/04-BEATS-CONTRACT.md 记录迁移方式。1.2.0 新增可选的 lines[].performance（局部表演调度）；旧文件继续有效。"
     },
     "work_id": {
       "type": "string",
@@ -26,7 +26,7 @@
     "selected_at": { "type": ["string", "null"], "format": "date-time" },
     "beats_hash": {
       "type": ["string", "null"],
-      "description": "对 beats[].{decision, lines, source_span} 的 sha256。下游发现哈希对不上，说明取舍在交付后被偷改。"
+      "description": "对 beats[].{decision, source_span, lines[].台词与表演字段} 的 sha256。下游发现哈希对不上，说明取舍或演出在交付后被改动。"
     },
     "source": {
       "type": "object",
@@ -270,6 +270,13 @@
               "character_id": { "type": "string" },
               "text": { "type": "string", "minLength": 1, "description": "改编后的台词。写成能直接送进 TTS 的口语，不是书面叙述。" },
               "delivery": { "type": ["string", "null"], "description": "情绪与语气提示，桥接时写入 dialogue.emotion。" },
+              "performance": {
+                "description": "对本句原文字符区间的表演计划。台词仍是唯一文本真源；这里不重复保存片段文本。",
+                "anyOf": [
+                  { "$ref": "#/$defs/performance_plan" },
+                  { "type": "null" }
+                ]
+              },
               "shot_size": {
                 "type": ["string", "null"],
                 "enum": ["extreme_close_up", "close_up", "medium", "full", "wide", "insert", null]
@@ -341,6 +348,37 @@
         "low_max_shots": {
           "type": "integer", "minimum": 1, "maximum": 12, "default": 1,
           "description": "铺垫段的镜头数上限。一个镜头交代完就走。"
+        }
+      }
+    },
+    "performance_plan": {
+      "type": "object",
+      "required": ["text_sha256", "segments"],
+      "additionalProperties": false,
+      "properties": {
+        "text_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$", "description": "计划所对应台词的哈希；改写后不匹配即失效，不允许错位套用。" },
+        "intent": { "type": ["string", "null"], "description": "给导演和人工审听看的整句表演意图。" },
+        "segments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["start_char", "end_char", "style", "event_before"],
+            "additionalProperties": false,
+            "properties": {
+              "start_char": { "type": "integer", "minimum": 0 },
+              "end_char": { "type": "integer", "minimum": 1, "description": "半开区间 [start_char, end_char)。" },
+              "style": {
+                "type": ["string", "null"],
+                "enum": ["soft", "whisper", "loud", "build-intensity", "decrease-intensity", "higher-pitch", "lower-pitch", "slow", "fast", "sing-song", "singing", "laugh-speak", "emphasis", null]
+              },
+              "event_before": {
+                "type": ["string", "null"],
+                "enum": ["pause", "long-pause", "hum-tune", "laugh", "chuckle", "giggle", "cry", "tsk", "tongue-click", "lip-smack", "breath", "inhale", "exhale", "sigh", null]
+              }
+            }
+          }
         }
       }
     },

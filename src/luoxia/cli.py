@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     p_compose.add_argument("episode_id")
     p_compose.add_argument("--out", default=None)
 
-    p_lipsync = sub.add_parser("lipsync", help="Optional lipsync post-process (non-blocking)")
+    p_lipsync = sub.add_parser("lipsync", help="Run required MuseTalk audio-driven lipsync")
     p_lipsync.add_argument("episode_id")
 
     args = parser.parse_args(argv)
@@ -280,9 +280,11 @@ def main(argv: list[str] | None = None) -> int:
 
             path = timeline_path(root, args.episode_id)
             tl = load_timeline(path)
-            apply_lipsync(tl, output_root=root / args.episode_id)
-            save_timeline(path, tl)
-            print("lipsync pass complete (failures non-blocking)")
+            try:
+                apply_lipsync(tl, output_root=root / args.episode_id)
+            finally:
+                save_timeline(path, tl)
+            print("required lipsync pass complete")
             return 0
     except BudgetExceededError as exc:
         print(str(exc), file=sys.stderr)
@@ -298,32 +300,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _make_tts_synthesize(episode_dir: Path, timeline: dict):
-    from src.audio.tts import TTSProcessor
+    from src.luoxia.speech import make_tts_synthesize
 
-    tts = TTSProcessor()
-    cast_voices = {
-        c.get("character_id"): c.get("voice_id")
-        for c in (timeline.get("cast") or [])
-        if c.get("character_id")
-    }
-
-    def synthesize(shot, speed: float):
-        dialogue = shot.get("dialogue") or {}
-        text = dialogue.get("text") or ""
-        voice = (shot.get("audio") or {}).get("voice_id") or cast_voices.get(dialogue.get("character_id"))
-        if not voice:
-            raise ValueError(f"{shot.get('shot_id')}: no voice_id in audio or cast")
-        out = episode_dir / "audio" / f"{shot['shot_id']}.wav"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        path, measured, digest = tts.synthesize_measured(
-            text=text,
-            output_path=str(out),
-            voice=voice,
-            speech_rate=speed,
-        )
-        return measured, path, digest
-
-    return synthesize
+    return make_tts_synthesize(episode_dir, timeline)
 
 
 if __name__ == "__main__":

@@ -66,6 +66,7 @@
     "tabDesign": "我的设计",
     "recommended": "推荐",
     "basedOnCharacter": "基于角色 {gender}",
+    "groupXai": "xAI 表演音色",
     "groupCosyvoice": "CosyVoice 标准",
     "groupStandardZh": "Qwen3-TTS 标准",
     "groupDialect": "方言",

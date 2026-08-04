@@ -31,8 +31,8 @@ import VoiceDesignModal from "./VoiceDesignModal";
 // L1.5 推荐: gender-based curated 4 voices (Q4 推荐)
 // Hard-coded "通用最不会出错"组合。LLM-based L4 推荐 stub for future PR.
 const RECOMMENDED_BY_GENDER: Record<string, string[]> = {
-    Male: ["longcheng_v2", "longze_v2", "longshu_v2", "longxiaocheng_v2"],
-    Female: ["longxiaochun_v2", "longyue_v2", "longfeifei_v2", "longwan_v2"],
+    Male: ["orion", "leo", "rex", "sirius", "longcheng_v2", "longze_v2", "longshu_v2", "longxiaocheng_v2"],
+    Female: ["iris", "celeste", "ara", "eve", "longxiaochun_v2", "longyue_v2", "longfeifei_v2", "longwan_v2"],
 };
 
 interface VoicePickerModalProps {
@@ -221,11 +221,12 @@ export default function VoicePickerModal({
     // Group system voices by sub-category for the catalog area
     const groups = useMemo(() => {
         const systemVoices = voices.filter((v) => v.origin === "system");
+        const xai = systemVoices.filter((v) => v.family === "xai");
         const cosy = systemVoices.filter((v) => v.family === "cosyvoice");
         const qwenStandard = systemVoices.filter((v) => v.family === "qwen3" && !v.dialect && !v.lang_primary);
         const qwenDialect = systemVoices.filter((v) => v.family === "qwen3" && v.dialect);
         const qwenIntl = systemVoices.filter((v) => v.family === "qwen3" && v.lang_primary);
-        return { cosy, qwenStandard, qwenDialect, qwenIntl };
+        return { xai, cosy, qwenStandard, qwenDialect, qwenIntl };
     }, [voices]);
 
     if (!isOpen) return null;
@@ -317,6 +318,7 @@ export default function VoicePickerModal({
                             )}
 
                             {/* Grouped catalog */}
+                            <VoiceGroup label={t("groupXai")} voices={groups.xai} selectedId={selectedId} playingId={playingId} previewingId={previewingId} onSelect={setSelectedId} onPreview={handlePreview} />
                             <VoiceGroup label={t("groupCosyvoice")} voices={groups.cosy} selectedId={selectedId} playingId={playingId} previewingId={previewingId} onSelect={setSelectedId} onPreview={handlePreview} />
                             <VoiceGroup label={t("groupStandardZh")} voices={groups.qwenStandard} selectedId={selectedId} playingId={playingId} previewingId={previewingId} onSelect={setSelectedId} onPreview={handlePreview} />
                             <VoiceGroup label={t("groupDialect")} voices={groups.qwenDialect} selectedId={selectedId} playingId={playingId} previewingId={previewingId} onSelect={setSelectedId} onPreview={handlePreview} />

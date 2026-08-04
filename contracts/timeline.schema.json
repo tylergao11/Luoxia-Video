@@ -9,8 +9,8 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0"],
-      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/01-TIMELINE-CONTRACT.md 记录迁移方式。1.1.0 新增可选的 global.subtitle_style 与 shots[].transition，1.0.0 文件继续有效。"
+      "enum": ["1.0.0", "1.1.0", "1.2.0"],
+      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/01-TIMELINE-CONTRACT.md 记录迁移方式。1.2.0 新增可选的 dialogue.performance（局部表演调度）；旧文件继续有效。"
     },
     "project_id": { "type": "string", "minLength": 1 },
     "episode_id": {
@@ -78,7 +78,7 @@
           "character_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
           "display_name": { "type": "string" },
           "voice_id": { "type": "string" },
-          "tts_provider": { "type": "string", "default": "xai.tts" },
+          "tts_provider": { "type": "string", "default": "qwen3.tts" },
           "reference_image_asset_id": { "type": ["string", "null"] },
           "voice_instructions": { "type": ["string", "null"], "description": "情绪/风格指令，若 TTS 供应商支持。" }
         }
@@ -174,7 +174,14 @@
         "text": { "type": "string", "minLength": 1, "description": "最终送进 TTS 的台词，可能已被 solver 改写。" },
         "source_text": { "type": ["string", "null"], "description": "改写前的原始台词，保留用于人工比对。" },
         "rewrite_count": { "type": "integer", "minimum": 0, "default": 0, "maximum": 3 },
-        "emotion": { "type": ["string", "null"] }
+        "emotion": { "type": ["string", "null"], "description": "旧版自由文本表演意图；没有 performance 或计划因改写失效时作为兼容输入。" },
+        "performance": {
+          "description": "基于 dialogue.text 字符区间的规范化表演计划；供应商标记只在 TTS 边界临时编译。",
+          "anyOf": [
+            { "$ref": "#/$defs/performance_plan" },
+            { "type": "null" }
+          ]
+        }
       }
     },
     "audio": {
@@ -185,6 +192,7 @@
         "status": { "type": "string", "enum": ["pending", "rendering", "rendered", "failed"] },
         "provider": { "type": ["string", "null"] },
         "voice_id": { "type": ["string", "null"] },
+        "take_id": { "type": ["string", "null"], "description": "人工要求新候选时填写；参与缓存键，用来强制生成不同 take，不传给字幕或视频。" },
         "speed": {
           "type": "number", "minimum": 0.5, "maximum": 2.0, "default": 1.0,
           "description": "实际应用的语速倍率。solver 只允许在 global.min/max_speed_ratio 区间内调整。"
@@ -194,8 +202,39 @@
           "description": "实测时长，单位秒，浮点。必须来自对产出音频文件的探测（ffprobe），不得使用字数估算。"
         },
         "local_path": { "type": ["string", "null"] },
-        "sha256": { "type": ["string", "null"], "description": "台词+音色+语速的内容哈希，用于跳过无变更的重复合成。" },
+        "sha256": { "type": ["string", "null"], "description": "供应商合同版本+最终表演标记文本+音色+语速+采样率的内容哈希，用于跳过完全相同的重复合成。" },
         "error": { "type": ["string", "null"] }
+      }
+    },
+    "performance_plan": {
+      "type": "object",
+      "required": ["text_sha256", "segments"],
+      "additionalProperties": false,
+      "properties": {
+        "text_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "intent": { "type": ["string", "null"] },
+        "segments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["start_char", "end_char", "style", "event_before"],
+            "additionalProperties": false,
+            "properties": {
+              "start_char": { "type": "integer", "minimum": 0 },
+              "end_char": { "type": "integer", "minimum": 1 },
+              "style": {
+                "type": ["string", "null"],
+                "enum": ["soft", "whisper", "loud", "build-intensity", "decrease-intensity", "higher-pitch", "lower-pitch", "slow", "fast", "sing-song", "singing", "laugh-speak", "emphasis", null]
+              },
+              "event_before": {
+                "type": ["string", "null"],
+                "enum": ["pause", "long-pause", "hum-tune", "laugh", "chuckle", "giggle", "cry", "tsk", "tongue-click", "lip-smack", "breath", "inhale", "exhale", "sigh", null]
+              }
+            }
+          }
+        }
       }
     },
     "timing": {

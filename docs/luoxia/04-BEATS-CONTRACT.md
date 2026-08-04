@@ -264,7 +264,19 @@ selector 会自动修复第一条：发现保留段落的依赖被判丢弃，�
 
 预算只约束我们**额外加的**无台词镜头：实际上限是 `max(预算, 台词数)`，所以一个台词多的段落不会因为内容取舍已经批准的台词而被判超支。
 
-镜头调度**不参与 `beats_hash`**。哈希只覆盖 `{decision, lines, source_span}`，也就是"砍什么、留什么、说什么"。覆盖方式是手法层决策，重调不该让选片结果失效——和 timeline 里 `transition` / `subtitle_style` 不进 `timeline_hash` 是同一个道理。
+镜头调度**不参与 `beats_hash`**。哈希覆盖 `{decision, source_span, lines[].台词与表演字段}`，也就是“砍什么、留什么、说什么、怎么演”。覆盖方式是镜头手法，重调不该让选片结果失效——和 timeline 里 `transition` / `subtitle_style` 不进 `timeline_hash` 是同一个道理。
+
+## 8c. 台词表演调度（performance）
+
+`1.2.0` 在 `lines[]` 增加可选 `performance`。模型不负责数偏移，只返回本句中的逐字片段；analyzer 校验片段确实存在后换算成 `[start_char, end_char)`，并丢弃重复的片段文本。因此 `line.text` 仍是唯一台词真源。
+
+表演计划遵守三条硬规则：
+
+- 一个片段只有一个主 style，不把压抑、渐强、强调等标签套住整句后层层嵌套。
+- 一句最多一个 `event_before`；“悲伤”或“哽咽”不会自动变成冗长的哭声事件。
+- `text_sha256` 必须等于当前台词；改写、拆句后计划清空并从 `delivery` 保守重编译，禁止旧偏移滑到新文本上。
+
+例如“开头压低、问句渐强、最后决绝”会成为三个互不重叠的字符区间。桥接时原样写入 `dialogue.performance`，直到 TTS 请求边界才编译成供应商标记；字幕与口型永远只消费干净台词。
 
 ---
 
@@ -273,7 +285,7 @@ selector 会自动修复第一条：发现保留段落的依赖被判丢弃，�
 `build_timeline_draft(beats_doc, episode_id)` 把一集展开成镜头：
 
 - `visuals[]` 按 `after_line` **交织**进台词序列，每个 → 一个 `timing_driver=rhythm` 的镜头，`shot_id` 后缀 `_v<slot><序号>` 标明它插在哪
-- 每条 `line` → 一个 `timing_driver=audio` 的镜头，`delivery` 写进 `dialogue.emotion`
+- 每条 `line` → 一个 `timing_driver=audio` 的镜头，`delivery` 写进 `dialogue.emotion`，规范化后的 `performance` 写进 `dialogue.performance`
 - `kind` 映射成 timeline 的 `shots[].type`（`reaction` / `insert` / `action`，`establishing` 在无台词段落记作 `transition`），这样人工审片时一眼能看出镜头调度
 - 所有镜头默认 `transition.kind=cut`：正反打叠化会读成时间跳跃，反应镜头必须硬切
 - `cast` 透传，缺 `voice_id` 直接报错（TTS 跑不了）
@@ -290,7 +302,7 @@ beats-select → beats-bridge → solve → freeze → render → compose
                 （草稿）      （合法 timeline）
 ```
 
-`tests/luoxia/test_beats_bridge.py::test_beats_to_solve_to_valid_timeline` 跑完整条链路，确认桥接产物过 solver 之后能通过 timeline 的全部 16 条不变量。
+桥接产物经过 solver 后必须通过 timeline 的全部结构与时长不变量，包括第 17 条表演区间与台词哈希一致性。
 
 ---
 

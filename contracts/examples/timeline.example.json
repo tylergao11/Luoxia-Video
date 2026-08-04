@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "project_id": "luoxia_demo",
   "episode_id": "ep01",
   "title": "第一集 · 重逢",
@@ -31,16 +31,16 @@
     {
       "character_id": "lin_wan",
       "display_name": "林晚",
-      "voice_id": "luna",
-      "tts_provider": "xai.tts",
+      "voice_id": "qwen3-young-female",
+      "tts_provider": "qwen3.tts",
       "reference_image_asset_id": "asset_char_linwan_v3",
       "voice_instructions": "清冷、克制，语速偏慢"
     },
     {
       "character_id": "shen_ce",
       "display_name": "沈策",
-      "voice_id": "atlas",
-      "tts_provider": "xai.tts",
+      "voice_id": "qwen3-young-male",
+      "tts_provider": "qwen3.tts",
       "reference_image_asset_id": "asset_char_shence_v2",
       "voice_instructions": "低沉、压抑"
     }
@@ -111,8 +111,8 @@
       },
       "audio": {
         "status": "rendered",
-        "provider": "dashscope.cosyvoice",
-        "voice_id": "longxiaochun",
+        "provider": "qwen3",
+        "voice_id": "qwen3-young-female",
         "speed": 1.0,
         "measured_duration_s": 1.42,
         "local_path": "output/ep01/audio/ep01_s002.wav",
@@ -179,8 +179,8 @@
       },
       "audio": {
         "status": "rendered",
-        "provider": "dashscope.cosyvoice",
-        "voice_id": "longshu",
+        "provider": "qwen3",
+        "voice_id": "qwen3-young-male",
         "speed": 1.05,
         "measured_duration_s": 8.6,
         "local_path": "output/ep01/audio/ep01_s003.wav",
@@ -256,8 +256,8 @@
       },
       "audio": {
         "status": "rendered",
-        "provider": "dashscope.cosyvoice",
-        "voice_id": "longxiaochun",
+        "provider": "qwen3",
+        "voice_id": "qwen3-young-female",
         "speed": 1.08,
         "measured_duration_s": 4.2,
         "local_path": "output/ep01/audio/ep01_s004.wav",

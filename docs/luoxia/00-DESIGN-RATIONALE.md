@@ -95,7 +95,9 @@ def create_video_task(self, script_id, image_url, prompt, duration: int = 5, ...
 
 ### 4.4 TTS 绑死 DashScope
 
-`src/audio/tts.py` 的 `TTSProcessor` 走 `dashscope` SDK（CosyVoice 与 Qwen3-TTS 两条路径），读 `DASHSCOPE_API_KEY`。类结构规整，包一层 provider 抽象不难，但目前没有。
+> 本节记录最初审计时的上游状态。Luoxia 1.2 已改为 `src/luoxia/speech.py` 单一语音边界，默认使用本地 Qwen3-TTS VoiceDesign；xAI 与 `src/audio/tts.py` 只保留给显式兼容工作流。
+
+最初 `src/audio/tts.py` 的 `TTSProcessor` 走 `dashscope` SDK（CosyVoice 与 Qwen3-TTS 两条路径），读 `DASHSCOPE_API_KEY`，且各入口会自行实例化供应商。
 
 ### 4.5 维护风险
 
@@ -108,7 +110,7 @@ def create_video_task(self, script_id, image_url, prompt, duration: int = 5, ...
 ### 阶段一（当前）：云 API 跑通效果
 
 - 视频：**Grok（xAI Imagine）**，`grok-imagine-video-1.5`，I2V 为主。
-- TTS：DashScope CosyVoice（沿用上游）。
+- TTS：本地 Qwen3-TTS VoiceDesign（音频先锁定，云视频不再决定声音）。
 - 目标：跑通 audio-first 全链路，验证成片质量与单集成本。
 
 选 Grok 起步是因为按秒计费、时长参数为 1–15 秒整数、I2V 接口简单，适合验证时序模型是否正确。
@@ -116,8 +118,8 @@ def create_video_task(self, script_id, image_url, prompt, duration: int = 5, ...
 ### 阶段二：换本地模型控成本
 
 - 视频：本地 Wan 2.7（Apache 2.0，权重可商用可微调）。
-- TTS：本地 CosyVoice（Apache 2.0）或 GPT-SoVITS（MIT）。
-- 口型：LatentSync（Apache 2.0）。
+- TTS：本地 Qwen3-TTS（Apache 2.0）。
+- 口型：MuseTalk 1.5（代码 MIT，模型允许商业使用；第三方依赖仍各自遵守许可证）。
 
 阶段二能否低成本完成，取决于阶段一是否严格遵守了 `02-PROVIDER-CONTRACT.md` 的适配器边界。**业务代码里出现任何 xAI 专有字段，都是在给阶段二埋债。**
 
@@ -127,7 +129,7 @@ def create_video_task(self, script_id, image_url, prompt, duration: int = 5, ...
 
 项目本身 MIT 不代表安全，真正的商业条款风险在模型权重。
 
-**可用**：Wan 2.7 / 2.2（Apache 2.0）、CosyVoice（Apache 2.0）、GPT-SoVITS（MIT）、LatentSync（Apache 2.0，已核对仓库 LICENSE 原文）。
+**可用**：Wan 2.7 / 2.2（Apache 2.0）、Qwen3-TTS（Apache 2.0）、CosyVoice（Apache 2.0）、GPT-SoVITS（MIT）、MuseTalk（代码 MIT，模型允许商业使用）。
 
 **需逐条审**：IndexTTS 使用 bilibili 自定义 Model Use License，不是 Apache。
 

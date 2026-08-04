@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from jsonschema import Draft202012Validator
 
+from src.audio.performance import validate_performance
 from src.luoxia.beats.hashing import compute_beats_hash
 from src.luoxia.paths import BEATS_SCHEMA_PATH
 
@@ -331,6 +332,15 @@ def _check_per_beat(
                         message=f"line character_id '{cid}' not in cast",
                         beat_id=bid,
                         invariant=17,
+                    )
+                )
+            for message in validate_performance(ln.get("text") or "", ln.get("performance")):
+                issues.append(
+                    BeatsIssue(
+                        code="invalid_performance",
+                        message=message,
+                        beat_id=bid,
+                        invariant=22,
                     )
                 )
 

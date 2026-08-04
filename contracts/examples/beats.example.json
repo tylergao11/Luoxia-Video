@@ -1,10 +1,10 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "work_id": "luoxia_demo",
   "title": "废物千金 · 第一章",
   "phase": "selected",
   "selected_at": "2026-08-04T14:05:00+08:00",
-  "beats_hash": "sha256:a3cec4663cfa3594c402247c5ef701e87bebac69199807a523b968f981f39037",
+  "beats_hash": "sha256:9f2a9ca1bd04054f25cbcb1cba93d31fef46071b38325946c6b34e37345a0ab6",
   "source": {
     "source_id": "ch001",
     "title": "第一章 拍卖会",
@@ -37,7 +37,7 @@
     {
       "character_id": "lin_wan",
       "display_name": "林晚",
-      "voice_id": "longxiaochun",
+      "voice_id": "qwen3-young-female",
       "role": "protagonist",
       "aliases": [
         "林家大小姐",
@@ -49,7 +49,7 @@
     {
       "character_id": "shen_ce",
       "display_name": "沈策",
-      "voice_id": "longshu",
+      "voice_id": "qwen3-young-male",
       "role": "antagonist",
       "aliases": [
         "沈总"

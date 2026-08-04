@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from jsonschema import Draft202012Validator
 
+from src.audio.performance import validate_performance
 from src.luoxia.catalog_limits import find_shot_video_model, resolve_video_duration_bounds
 from src.luoxia.paths import TIMELINE_SCHEMA_PATH
 from src.luoxia.timeline.transitions import CUT, DISSOLVE, head_room_s, tail_room_s, transition_of
@@ -173,6 +174,15 @@ def _check_invariants(
                     message=f"dialogue.character_id '{cid}' not in cast",
                     shot_id=sid,
                     invariant=12,
+                )
+            )
+        for message in validate_performance(dialogue.get("text") or "", dialogue.get("performance")):
+            issues.append(
+                ValidationIssue(
+                    code="invalid_performance",
+                    message=message,
+                    shot_id=sid,
+                    invariant=17,
                 )
             )
 

@@ -12,6 +12,7 @@ from src.luoxia.beats.validator import validate_beats
 from src.luoxia.compose.assembler import assemble_episode
 from src.luoxia.env import load_env_once
 from src.luoxia.llm.client import LuoxiaLLM
+from src.luoxia.lipsync.runner import apply_lipsync
 from src.luoxia.paths import beats_path, timeline_frozen_path, timeline_path
 from src.luoxia.render.runner import render_timeline_videos
 from src.luoxia.rewrite import make_rewrite_fn
@@ -56,9 +57,11 @@ def run_from_novel(
     """Full audio-first pipeline: novel → beats → timeline → audio → stills → video → final.mp4.
 
     Requires:
-      - DASHSCOPE_API_KEY for LLM + TTS + stills (read from .env)
-      - resolvable video credentials: either session login (subscription pool) or
-        LUOXIA_AUTH_MODE=api_key with XAI_API_KEY
+      - the local Qwen3-TTS VoiceDesign runtime for dialogue
+      - the local MuseTalk 1.5 runtime for required dialogue close-ups
+      - resolvable xAI credentials for LLM + stills + video: either session login
+        (subscription pool) or LUOXIA_AUTH_MODE=api_key with XAI_API_KEY
+      - DASHSCOPE_API_KEY only when the legacy DashScope LLM/provider path is selected
 
     `max_repair_severity` refuses to continue when the harness had to patch the model's
     output too heavily; see beats_doc["quality"]. `lock_faces` generates one portrait per
@@ -192,6 +195,20 @@ def run_from_novel(
         render(tl, output_root=ep_root, timeline_path=tpath)
         save_timeline(tpath, tl)
 
+    # --- 9b. audio-driven mouth pass ---
+    needs_lipsync = any(
+        (shot.get("lipsync") or {}).get("required")
+        and (shot.get("lipsync") or {}).get("status") != "done"
+        for shot in tl.get("shots") or []
+    )
+    if needs_lipsync:
+        note("lipsync")
+        try:
+            apply_lipsync(tl, output_root=ep_root)
+        finally:
+            # Preserve the exact failed shot/reason before propagating the hard failure.
+            save_timeline(tpath, tl)
+
     # --- 10. compose ---
     final = ep_root / "final.mp4"
     if not skip_compose:
@@ -234,33 +251,9 @@ def assert_video_credentials() -> None:
 
 
 def _make_tts(episode_dir: Path, timeline: dict):
-    from src.audio.xai_tts import XaiTTS
+    from src.luoxia.speech import make_tts_synthesize
 
-    tts = XaiTTS()
-    cast_voices = {
-        c.get("character_id"): c.get("voice_id")
-        for c in (timeline.get("cast") or [])
-        if c.get("character_id")
-    }
-
-    def synthesize(shot, speed: float):
-        dialogue = shot.get("dialogue") or {}
-        text = dialogue.get("text") or ""
-        voice = (shot.get("audio") or {}).get("voice_id") or cast_voices.get(dialogue.get("character_id"))
-        if not voice:
-            raise ValueError(f"{shot.get('shot_id')}: no voice_id in audio or cast")
-        out = episode_dir / "audio" / f"{shot['shot_id']}.wav"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        path, measured, digest = tts.synthesize_measured(
-            text=text,
-            output_path=str(out),
-            voice=voice,
-            speech_rate=speed,
-            instructions=dialogue.get("emotion"),
-        )
-        return measured, path, digest
-
-    return synthesize
+    return make_tts_synthesize(episode_dir, timeline)
 
 
 # Re-export for callers that import analyzer helpers from pipeline.

@@ -5,6 +5,10 @@ from typing import Dict, Any, List, Optional
 from .models import StoryboardFrame, Character, GenerationStatus
 from ...utils import get_logger
 from ...audio.tts import TTSProcessor
+from ...audio.qwen3_tts import VOICE_PROFILES as QWEN3_VOICES
+from ...audio.qwen3_tts import Qwen3TTS, voice_records as qwen3_voice_records
+from ...audio.xai_tts import VOICES as XAI_VOICES
+from ...audio.xai_tts import XaiTTS, voice_records as xai_voice_records
 
 logger = get_logger(__name__)
 
@@ -85,6 +89,90 @@ class AudioGenerator:
         except Exception as e:
             logger.warning(f"Failed to initialize TTS Processor: {e}. Using mock mode.")
             self.tts = None
+        # xAI resolves its credential lazily.  Construction must stay cheap so the app
+        # can still open its voice catalog while a subscription session needs renewal.
+        self.xai_tts = XaiTTS()
+        # Local VoiceDesign runs in its own CUDA environment; construction only checks
+        # paths and never loads the model into the API process.
+        self.qwen3_tts = Qwen3TTS()
+
+    def _prefer_qwen3_system_voices(self) -> bool:
+        requested = (os.getenv("LUOXIA_TTS_PROVIDER") or "qwen3").strip().lower()
+        return requested in {"qwen3", "qwen3.tts", "qwen3-tts"} and self.qwen3_tts.available()
+
+    @staticmethod
+    def _prefer_xai_system_voices() -> bool:
+        from src.auth.resolver import status
+
+        auth = status()
+        if auth.provider == "xai_pool":
+            return True
+        if auth.mode == "api_key":
+            return bool(os.getenv("XAI_API_KEY")) or not bool(os.getenv("DASHSCOPE_API_KEY"))
+        return False
+
+    @staticmethod
+    def is_xai_voice(voice_id: Optional[str]) -> bool:
+        return bool(voice_id and voice_id in XAI_VOICES)
+
+    @staticmethod
+    def is_qwen3_voice(voice_id: Optional[str]) -> bool:
+        return bool(voice_id and voice_id in QWEN3_VOICES)
+
+    def has_tts_for_voice(self, voice_id: Optional[str]) -> bool:
+        return (
+            self.is_qwen3_voice(voice_id)
+            or self.is_xai_voice(voice_id)
+            or self.tts is not None
+        )
+
+    def preview_extension(self, voice_id: str) -> str:
+        return ".wav" if self.is_qwen3_voice(voice_id) or self.is_xai_voice(voice_id) else ".mp3"
+
+    def synthesize_preview(
+        self,
+        *,
+        text: str,
+        output_path: str,
+        voice_id: str,
+        speed: float,
+        pitch: float,
+        volume: int,
+        instructions: Optional[str],
+        model_override: Optional[str],
+        family_override: Optional[str],
+    ) -> None:
+        if self.is_qwen3_voice(voice_id):
+            self.qwen3_tts.synthesize_measured(
+                text=text,
+                output_path=output_path,
+                voice=voice_id,
+                speech_rate=speed,
+                instructions=instructions,
+            )
+            return
+        if self.is_xai_voice(voice_id):
+            self.xai_tts.synthesize_measured(
+                text=text,
+                output_path=output_path,
+                voice=voice_id,
+                speech_rate=speed,
+                instructions=instructions,
+            )
+            return
+        if self.tts is None:
+            raise RuntimeError("DashScope TTS service is unavailable")
+        self.tts.synthesize(
+            text=text,
+            output_path=output_path,
+            voice=voice_id,
+            speech_rate=speed,
+            pitch_rate=pitch,
+            volume=volume,
+            instructions=instructions,
+            model_override=model_override,
+            family_override=family_override,
+        )
 
     def get_available_voices(self) -> List[Dict[str, Any]]:
         """Returns a list of available voices with full registry metadata.
@@ -94,6 +182,10 @@ class AudioGenerator:
         3 tabs (系统音色 / 我的复刻 / 我的设计) with dialect/international
         sub-groupings inside 系统音色.
         """
+        if self._prefer_qwen3_system_voices():
+            return qwen3_voice_records()
+        if self._prefer_xai_system_voices():
+            return xai_voice_records()
         if self.tts:
             voices_dict = TTSProcessor.list_voices()
             return [
@@ -143,16 +235,15 @@ class AudioGenerator:
 
         logger.info(f"Generating dialogue for {character.name}: {text} (Speed: {speed}, Pitch: {pitch}, Volume: {volume}, instr: {instructions or '-'})")
 
-        if not self.tts:
-            frame.status = GenerationStatus.FAILED
-            frame.audio_error = "TTS service not available. Check DASHSCOPE_API_KEY configuration."
-            logger.warning(f"TTS not initialized, cannot generate audio for frame {frame.id}")
-            return frame
-
         if not character.voice_id:
             frame.status = GenerationStatus.FAILED
             frame.audio_error = f"No voice assigned to character '{character.name}'. Please assign a voice first."
             logger.warning(f"No voice_id for character {character.name}, cannot generate audio")
+            return frame
+        if not self.has_tts_for_voice(character.voice_id):
+            frame.status = GenerationStatus.FAILED
+            frame.audio_error = "The selected TTS provider is unavailable. Check login or API-key configuration."
+            logger.warning(f"TTS not initialized, cannot generate audio for frame {frame.id}")
             return frame
 
         return self._real_generate_dialogue(
@@ -176,18 +267,39 @@ class AudioGenerator:
     ) -> StoryboardFrame:
         """Generate dialogue using real TTS."""
         try:
-            output_path = os.path.join(self.output_dir, 'dialogue', f"{frame.id}.mp3")
+            extension = (
+                ".wav"
+                if self.is_qwen3_voice(character.voice_id) or self.is_xai_voice(character.voice_id)
+                else ".mp3"
+            )
+            output_path = os.path.join(self.output_dir, 'dialogue', f"{frame.id}{extension}")
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
             voice = character.voice_id
-
-            self.tts.synthesize(
-                text, output_path, voice=voice,
-                speech_rate=speed, pitch_rate=pitch, volume=volume,
-                instructions=instructions,
-                model_override=model_override,
-                family_override=family_override,
-            )
+            if self.is_qwen3_voice(voice):
+                self.qwen3_tts.synthesize_measured(
+                    text=text,
+                    output_path=output_path,
+                    voice=voice,
+                    speech_rate=speed,
+                    instructions=instructions,
+                )
+            elif self.is_xai_voice(voice):
+                self.xai_tts.synthesize_measured(
+                    text=text,
+                    output_path=output_path,
+                    voice=voice,
+                    speech_rate=speed,
+                    instructions=instructions,
+                )
+            else:
+                self.tts.synthesize(
+                    text, output_path, voice=voice,
+                    speech_rate=speed, pitch_rate=pitch, volume=volume,
+                    instructions=instructions,
+                    model_override=model_override,
+                    family_override=family_override,
+                )
 
             rel_path = os.path.relpath(output_path, "output")
             frame.audio_url = rel_path

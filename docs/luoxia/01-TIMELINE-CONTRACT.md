@@ -151,7 +151,7 @@ draft ──► audio_locked ──► frozen ──► rendering ──► rend
 - `shot_size` 为 `close_up` 或 `extreme_close_up`，且
 - `target_duration_s > 3.0`
 
-其余镜头一律 `status: "skipped"`。口型是**可选后处理**，挂在主链路之外：先出成片片段，再对命中的镜头单独跑 LatentSync 并替换 `local_path`。口型失败不得阻塞整集合成。
+其余镜头一律 `status: "skipped"`。命中的镜头在云端动作底片完成后，由主链路调用本地 MuseTalk 1.5，以已经锁定的音频逐帧重做嘴部并替换 `local_path`。口型失败会明确写入状态，但仍不得让一条镜头阻塞整集合成。
 
 ## 7. 成本估算
 
@@ -193,6 +193,15 @@ Grok 当前费率见 `02-PROVIDER-CONTRACT.md`。费率写在 provider 适配器
 - 新增不变量 16
 
 三者全部可选，`1.0.0` 的文件继续通过校验：缺 `transition` 视为硬切，缺 `subtitle_style` 走内置默认值。
+
+### 1.1.0 → 1.2.0（新增局部表演计划，无需迁移）
+
+- 新增 `dialogue.performance`：只保存 `dialogue.text` 的字符半开区间和该区间的一个主表演样式；台词仍是唯一文本真源。
+- `performance.text_sha256` 绑定当前台词。solver 改写或拆句后旧偏移立即失效并清空，绝不把原来的情绪错套到新字词上。
+- 新增 `audio.take_id`：人工要求 A/B 新候选时作为缓存扰动项。
+- `audio.sha256` 现在覆盖供应商合同版本、最终标记文本、采样率、音色、语速和 take；改变表演计划不会再误中旧缓存。
+
+旧文件只有 `dialogue.emotion` 时仍可运行：TTS 边界会把自由文本保守地编译为局部片段；每个片段最多一个样式、全句最多一个事件。供应商控制标签从不写入 `dialogue.text`、字幕或口型文本。
 
 ## 10. 转场与字幕位置
 

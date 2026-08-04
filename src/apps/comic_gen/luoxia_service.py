@@ -310,33 +310,11 @@ def solve_audio(script: Script) -> Tuple[Dict[str, Any], Script]:
     if tl.get("phase") != "draft":
         return public_status(script), script
 
-    from src.audio.tts import TTSProcessor
     from src.luoxia.rewrite import make_rewrite_fn
+    from src.luoxia.speech import make_tts_synthesize
 
     ep_root = OUTPUT_ROOT / episode_id_for(script)
-    tts = TTSProcessor()
-    cast_voices = {
-        c.get("character_id"): c.get("voice_id")
-        for c in (tl.get("cast") or [])
-        if c.get("character_id")
-    }
-
-    def synthesize(shot, speed: float):
-        dialogue = shot.get("dialogue") or {}
-        text = dialogue.get("text") or ""
-        voice = (shot.get("audio") or {}).get("voice_id") or cast_voices.get(dialogue.get("character_id"))
-        if not voice:
-            raise ValueError(f"{shot.get('shot_id')}: no voice_id")
-        out = ep_root / "audio" / f"{shot['shot_id']}.wav"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        path, measured, digest = tts.synthesize_measured(
-            text=text,
-            output_path=str(out),
-            voice=voice,
-            speech_rate=speed,
-            instructions=dialogue.get("emotion"),
-        )
-        return measured, path, digest
+    synthesize = make_tts_synthesize(ep_root, tl)
 
     llm = LuoxiaLLM()
     solve_timeline(tl, synthesize=synthesize, rewrite=make_rewrite_fn(llm))

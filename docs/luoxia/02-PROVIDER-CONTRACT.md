@@ -180,11 +180,11 @@ ffmpeg -i in.mp4 -c:v copy -an out.mp4
 
 一集 20 镜、平均 5 秒、720p 的粗估：`20 × 5 × 0.07 + 20 × 0.002 = $7.04`。抽卡重试会显著抬高实际值，这正是 `cost.budget_ceiling_usd` 存在的理由。
 
-### 3.8 不要用 Grok 做配音
+### 3.8 不要把视频模型自带音轨当配音
 
 `reference_audios` 仅限美国地区的受信合作伙伴，且只能选内置 `voice_id`，**无法上传自有音频**。
 
-这意味着 Grok 不能承担本项目的配音角色，也无法用它做"我方 TTS 音色的口型驱动"。配音继续走 CosyVoice，口型走 LatentSync。这不是遗憾，反而印证了架构分层的必要性。
+视频生成接口的音轨不能承担本项目的配音角色，也无法替代“我方 TTS 音频驱动口型”。Luoxia 的默认配音走本地 Qwen3-TTS VoiceDesign，生成视频自带的音轨仍必须剥离；MuseTalk 只消费已经锁定的 Luoxia 音频。这印证了架构分层的必要性。
 
 ## 4. 阶段二：换本地 Wan 需要满足什么
 
@@ -202,8 +202,6 @@ ffmpeg -i in.mp4 -c:v copy -an out.mp4
 
 ## 5. 语音后端
 
-`src/audio/tts.py` 的 `TTSProcessor` 目前绑死 DashScope（CosyVoice 与 Qwen3-TTS 两条路径，读 `DASHSCOPE_API_KEY`）。
+Luoxia 的唯一语音边界是 `src/luoxia/speech.py`，默认供应商为本地 `src/audio/qwen3_tts.py`，`src/audio/xai_tts.py` 仅保留为显式兼容供应商。pipeline、CLI 和桌面 API 必须共用这组适配器，禁止各自形成第二条链路。旧版 `src/audio/tts.py` 只服务仍使用 DashScope 自定义音色的旧工作流。
 
-阶段一沿用，但需要补一件事：**合成后必须用 ffprobe 探测真实音频时长**写入 `audio.measured_duration_s`。绝对不要用字数估算——整个 audio-first 架构的地基就是这个实测值，估算会让所有下游计算失真。
-
-改造 TTS provider 抽象照抄 `src/models/` 的模式：抽象基类 + 工厂 + registry，不要另起一套。
+自由文本导演意图先变成 provider-neutral 的字符区间计划，再由 Qwen3 适配器编译为真人表演指令；显式选择 xAI 时才编译局部控制标签。缓存键覆盖最终表演指令。**合成后必须用 ffprobe 探测真实音频时长**写入 `audio.measured_duration_s`，绝对不要用字数估算。

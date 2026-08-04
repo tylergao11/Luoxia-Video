@@ -13,18 +13,21 @@ import hashlib
 import json
 import logging
 import os
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from src.audio.performance import clean_audio_timestamps, compile_performance
 
 logger = logging.getLogger(__name__)
 
 _API_BASE = "https://api.x.ai/v1"
 _DEFAULT_SAMPLE_RATE = 44100
 
-# Built-in voices from GET /v1/tts/voices. All are multilingual; gender is what casting
-# needs, so that is what we keep. Custom cloned voice ids are accepted too (see
-# POST /v1/custom-voices), which is why an unknown id is only rejected when it looks like
-# a stale voice from another vendor.
+# Built-in voices returned by the live REST `GET /v1/tts/voices` catalog. All are
+# multilingual; custom cloned voice ids are accepted too, which is why an unknown id is
+# only rejected when it looks like a stale voice from another vendor.
 VOICES: Dict[str, Dict[str, str]] = {
     "altair": {"gender": "male"},
     "ara": {"gender": "female"},
@@ -54,70 +57,18 @@ VOICES: Dict[str, Dict[str, str]] = {
     "zenith": {"gender": "male"},
 }
 
-# Tags wrap the whole line and shape delivery.
-STYLE_TAGS = (
-    "soft", "whisper", "loud", "build-intensity", "decrease-intensity",
-    "higher-pitch", "lower-pitch", "slow", "fast", "sing-song", "singing",
-    "laugh-speak", "emphasis",
-)
-# Tags are discrete events placed in the text.
-INLINE_TAGS = (
-    "pause", "long-pause", "hum-tune", "laugh", "chuckle", "giggle", "cry", "tsk",
-    "tongue-click", "lip-smack", "breath", "inhale", "exhale", "sigh",
-)
-
-# beats writes dialogue.emotion as free Chinese prose, so match on keywords. Order matters:
-# the first hit wins, so put the specific readings before the general ones.
-_STYLE_KEYWORDS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-    ("whisper", ("耳语", "低语", "悄声", "轻声", "压低声音", "声音很轻", "声音极轻")),
-    ("laugh-speak", ("笑着说", "带笑", "笑道")),
-    ("loud", ("大声", "怒吼", "咆哮", "厉声", "嘶喊", "喊道", "吼")),
-    ("build-intensity", ("渐强", "越来越激动", "情绪上涨")),
-    ("decrease-intensity", ("渐弱", "平息", "声音低下去")),
-    ("higher-pitch", ("尖锐", "拔高", "兴奋")),
-    ("lower-pitch", ("低沉", "沉声", "压抑")),
-    # "一字一句" is often angry bite-diction, not slow reading — map it under emphasis.
-    ("slow", ("缓慢", "迟疑", "犹豫", "慢条斯理", "拉长音")),
-    ("fast", ("急促", "焦急", "慌乱", "飞快")),
-    ("emphasis", ("强调", "加重", "咬字", "咬死", "咬牙", "字字", "一字一句", "恨意", "决绝")),
-    ("soft", ("温柔", "柔和", "轻柔", "平静", "淡淡", "很轻", "克制")),
-)
-_INLINE_KEYWORDS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-    ("sigh", ("叹息", "叹气", "长叹")),
-    ("cry", ("哭", "哽咽", "泣")),
-    ("chuckle", ("轻笑", "低笑", "冷笑")),
-    ("breath", ("喘", "气息不稳")),
-    ("inhale", ("深吸", "吸气")),
-    ("long-pause", ("长久沉默", "久久")),
-    ("pause", ("停顿", "顿了", "沉默")),
-)
-
+# Front-load voices that produced the clearest Mandarin dramatic contrast in the local
+# casting pass (quiet opening -> rising confrontation -> restrained beat -> hard close).
+# The remainder still stay available in stable alphabetical order.
+_PREFERRED_BY_GENDER = {
+    "female": ("iris", "celeste", "ara", "eve", "carina", "ursa", "luna"),
+    "male": ("orion", "leo", "rex", "sirius", "atlas", "zagan"),
+}
 
 def apply_emotion(text: str, emotion: Optional[str]) -> Tuple[str, List[str]]:
-    """Turn `dialogue.emotion` prose into xAI speech tags.
-
-    Returns the tagged text and the tags applied. An emotion that matches nothing comes
-    back with an empty list so the caller can say so instead of pretending it was used.
-    """
-    note = (emotion or "").strip()
-    if not note:
-        return text, []
-
-    applied: List[str] = []
-    body = text
-    # Inline events: at most one prefix cue (pause/sigh/…) so delivery stays clean.
-    for tag, keywords in _INLINE_KEYWORDS:
-        if any(k in note for k in keywords):
-            body = f"[{tag}]{body}"
-            applied.append(f"[{tag}]")
-            break
-    # Style wrappers: stack all matching tags (e.g. loud + emphasis + build-intensity)
-    # so short-drama lines can be both angry and bitten, not only the first keyword hit.
-    for tag, keywords in _STYLE_KEYWORDS:
-        if any(k in note for k in keywords):
-            body = f"<{tag}>{body}</{tag}>"
-            applied.append(f"<{tag}>")
-    return body, applied
+    """Compatibility wrapper for callers that still provide free-form direction."""
+    compiled, applied, _plan = compile_performance(text, legacy_direction=emotion)
+    return compiled, applied
 
 
 def voices_for_gender(gender: Optional[str]) -> List[str]:
@@ -129,7 +80,27 @@ def voices_for_gender(gender: Optional[str]) -> List[str]:
         want = "male"
     else:
         return sorted(VOICES)
-    return sorted(v for v, meta in VOICES.items() if meta["gender"] == want)
+    available = {voice_id for voice_id, meta in VOICES.items() if meta["gender"] == want}
+    preferred = [voice_id for voice_id in _PREFERRED_BY_GENDER.get(want, ()) if voice_id in available]
+    return preferred + sorted(available.difference(preferred))
+
+
+def voice_records() -> List[Dict[str, Any]]:
+    """Frontend-ready system catalog backed by the same ids synthesis validates."""
+    return [
+        {
+            "id": voice_id,
+            "name": voice_id.title(),
+            "gender": "Female" if meta["gender"] == "female" else "Male",
+            "model": "xai-tts",
+            "family": "xai",
+            "supports_instruction": True,
+            "dialect": None,
+            "lang_primary": "multilingual",
+            "origin": "system",
+        }
+        for voice_id, meta in sorted(VOICES.items())
+    ]
 
 
 class XaiTTS:
@@ -164,10 +135,23 @@ class XaiTTS:
     def base_url(self) -> str:
         return self._base_url or os.getenv("XAI_BASE_URL", _API_BASE).rstrip("/")
 
-    def content_sha256(self, text: str, voice_id: str, speed: float) -> str:
-        """Content hash for idempotent TTS. Includes vendor and language so a re-render
-        after switching providers or languages cannot silently reuse the old take."""
-        payload = f"xai\0{self.language}\0{text}\0{voice_id}\0{float(speed):.6f}".encode("utf-8")
+    def content_sha256(
+        self,
+        request_text: str,
+        voice_id: str,
+        speed: float,
+        take_id: Optional[str] = None,
+    ) -> str:
+        """Hash every input that can change the bytes returned by xAI.
+
+        `request_text` is the compiled marked text, not only the clean subtitle.  That
+        makes a changed performance plan invalidate the old take.  `take_id` is an
+        explicit cache buster for deliberate A/B takes because xAI exposes no seed.
+        """
+        payload = (
+            f"xai-tts-v3\0{self.language}\0{self.sample_rate}\0{request_text}\0"
+            f"{voice_id}\0{float(speed):.6f}\0{take_id or ''}"
+        ).encode("utf-8")
         return "sha256:" + hashlib.sha256(payload).hexdigest()
 
     def synthesize_measured(
@@ -177,6 +161,8 @@ class XaiTTS:
         voice: Optional[str] = None,
         speech_rate: float = 1.0,
         instructions: Optional[str] = None,
+        performance: Optional[Dict[str, Any]] = None,
+        take_id: Optional[str] = None,
         **_ignored: Any,
     ) -> Tuple[str, float, str]:
         """Synthesize one line; return (path, measured_duration_s, content_sha256).
@@ -191,43 +177,166 @@ class XaiTTS:
             raise ValueError("refusing to synthesize an empty line")
         voice_id = self._resolve_voice(voice)
 
-        digest = self.content_sha256(line, voice_id, speech_rate)
+        tagged, applied, effective_plan = compile_performance(
+            line,
+            performance=performance,
+            legacy_direction=instructions,
+        )
+
+        digest = self.content_sha256(tagged, voice_id, speech_rate, take_id)
         meta_path = Path(str(output_path) + ".sha256")
         out = Path(output_path)
+        if out.suffix.lower() != ".wav":
+            raise ValueError("xAI TTS returns WAV; output_path must end in .wav")
         if out.is_file() and meta_path.is_file():
             if meta_path.read_text(encoding="utf-8").strip() == digest:
                 measured = measure_media_duration_s(out)
                 logger.info("xai tts cache hit %s (%.3fs)", out, measured)
                 return str(out), measured, digest
 
-        tagged, applied = apply_emotion(line, instructions)
-        if instructions and not applied:
+        if (instructions or performance) and not applied:
             logger.warning(
-                "emotion %r matched no xai speech tag; line delivered without it: %s",
-                instructions, line[:20],
+                "performance direction produced no xai speech tag; line delivered plain: %s",
+                line[:20],
             )
 
         payload = self._request(tagged, voice_id, speech_rate)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(base64.b64decode(payload["audio"]))
+        cleaned = clean_audio_timestamps(payload.get("audio_timestamps"), line)
+        measured, trim_start = self._write_audio(
+            out,
+            base64.b64decode(payload["audio"]),
+            cleaned,
+            effective_plan,
+            measure_media_duration_s,
+        )
 
-        measured = measure_media_duration_s(out)
-        if measured <= 0:
-            raise RuntimeError(f"xai tts wrote an unplayable file: {out}")
-
-        timings = payload.get("audio_timestamps")
-        if timings:
-            # Keep what we already paid for: per-character times let subtitle cues be
-            # placed on real timings instead of estimated splits, without re-synthesizing.
-            Path(str(output_path) + ".timings.json").write_text(
-                json.dumps(timings, ensure_ascii=False), encoding="utf-8", newline="\n"
+        if cleaned is not None:
+            # xAI includes every control-tag character in graph_chars.  Persist only an
+            # exact alignment to the clean subtitle text; untrusted timing is worse than
+            # falling back to the timeline's measured line boundary.
+            timing_path = Path(str(output_path) + ".timings.json")
+            if trim_start > 0:
+                cleaned["graph_times"] = [
+                    [max(0.0, float(pair[0]) - trim_start), max(0.0, float(pair[1]) - trim_start)]
+                    for pair in cleaned["graph_times"]
+                ]
+            timing_path.write_text(
+                json.dumps(cleaned, ensure_ascii=False), encoding="utf-8", newline="\n"
             )
+        elif payload.get("audio_timestamps"):
+            Path(str(output_path) + ".timings.json").unlink(missing_ok=True)
+            logger.warning("xai timestamps could not align to clean text: %s", out.name)
         meta_path.write_text(digest + "\n", encoding="utf-8", newline="\n")
         logger.info(
-            "xai tts %s voice=%s speed=%.2f tags=%s -> %.3fs",
-            out.name, voice_id, speech_rate, ",".join(applied) or "-", measured,
+            "xai tts %s voice=%s speed=%.2f tags=%s plan=%s -> %.3fs",
+            out.name,
+            voice_id,
+            speech_rate,
+            ",".join(applied) or "-",
+            (effective_plan or {}).get("intent") or "-",
+            measured,
         )
         return str(out), measured, digest
+
+    def _write_audio(
+        self,
+        out: Path,
+        audio_bytes: bytes,
+        cleaned_timings: Optional[Dict[str, Any]],
+        performance: Optional[Dict[str, Any]],
+        measure,
+    ) -> Tuple[float, float]:
+        """Atomically write a take and remove provider control-token padding.
+
+        xAI's graph timeline assigns time to markup characters.  The old stacked-tag
+        request spent almost ten seconds before the first Chinese character and another
+        1.6 seconds after the last one.  When there is no deliberate event at position
+        zero, keep a small natural pad around the actual spoken window and discard that
+        control-token dead air before it can become timeline authority.
+        """
+        from src.utils.system_check import get_ffmpeg_path
+
+        out.parent.mkdir(parents=True, exist_ok=True)
+        raw_handle = tempfile.NamedTemporaryFile(
+            prefix=f"{out.stem}.raw-", suffix=".wav", dir=out.parent, delete=False
+        )
+        raw_path = Path(raw_handle.name)
+        trimmed_path: Optional[Path] = None
+        try:
+            raw_handle.write(audio_bytes)
+            raw_handle.close()
+            raw_duration = measure(raw_path)
+            if raw_duration <= 0:
+                raise RuntimeError(f"xai tts returned unplayable audio for {out}")
+
+            trim_start = 0.0
+            trim_end = raw_duration
+            if cleaned_timings and cleaned_timings.get("graph_times"):
+                first = float(cleaned_timings["graph_times"][0][0])
+                last = float(cleaned_timings["graph_times"][-1][1])
+                leading_event = any(
+                    int(segment.get("start_char") or 0) == 0 and segment.get("event_before")
+                    for segment in ((performance or {}).get("segments") or [])
+                )
+                if not leading_event and first > 0.25:
+                    trim_start = max(0.0, first - 0.12)
+                if raw_duration - last > 0.35:
+                    trim_end = min(raw_duration, last + 0.18)
+
+            candidate = raw_path
+            if trim_start > 0.02 or trim_end < raw_duration - 0.02:
+                ffmpeg = get_ffmpeg_path()
+                if not ffmpeg:
+                    raise RuntimeError("ffmpeg not found; cannot remove xAI control-token padding")
+                trim_handle = tempfile.NamedTemporaryFile(
+                    prefix=f"{out.stem}.trim-", suffix=".wav", dir=out.parent, delete=False
+                )
+                trimmed_path = Path(trim_handle.name)
+                trim_handle.close()
+                result = subprocess.run(
+                    [
+                        ffmpeg,
+                        "-y",
+                        "-v",
+                        "error",
+                        "-i",
+                        str(raw_path),
+                        "-ss",
+                        f"{trim_start:.6f}",
+                        "-t",
+                        f"{max(0.01, trim_end - trim_start):.6f}",
+                        "-ac",
+                        "1",
+                        "-ar",
+                        str(self.sample_rate),
+                        "-c:a",
+                        "pcm_s16le",
+                        str(trimmed_path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(f"trimming xai control padding failed: {result.stderr[-500:]}")
+                candidate = trimmed_path
+                logger.info(
+                    "xai tts trimmed control padding head=%.3fs tail=%.3fs",
+                    trim_start,
+                    raw_duration - trim_end,
+                )
+
+            measured = measure(candidate)
+            if measured <= 0:
+                raise RuntimeError(f"xai tts wrote an unplayable file: {candidate}")
+            candidate.replace(out)
+            return measured, trim_start
+        finally:
+            if not raw_handle.closed:
+                raw_handle.close()
+            raw_path.unlink(missing_ok=True)
+            if trimmed_path is not None:
+                trimmed_path.unlink(missing_ok=True)
 
     def _resolve_voice(self, voice: Optional[str]) -> str:
         """Reject voices this API does not know.

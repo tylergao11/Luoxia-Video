@@ -44,14 +44,14 @@ export type ProviderMode = "dashscope" | "vendor";
  *   Tab 1 系统音色 → origin === "system"
  *   Tab 2 我的复刻 → origin === "clone"   (PR-3h)
  *   Tab 3 我的设计 → origin === "design"  (PR-3i)
- * Inside Tab 1, group by family (cosyvoice / qwen3) + dialect markers.
+ * Inside Tab 1, group by family (xai / cosyvoice / qwen3) + dialect markers.
  */
 export interface VoiceMeta {
     id: string;
     name: string;
     gender: "Male" | "Female" | "Neutral" | "Unknown";
     model: string;                                            // backend model id (cosyvoice-v3-flash / qwen3-tts-flash / ...)
-    family: "cosyvoice" | "qwen3";
+    family: "xai" | "cosyvoice" | "qwen3";
     supports_instruction: boolean;
     dialect?: string | null;                                  // 'shanghai' | 'beijing' | 'sichuan' | 'cantonese' | etc.
     lang_primary?: string | null;                             // 'es' | 'ru' | 'it' | 'ko' | 'ja' | 'de' | 'fr' for international

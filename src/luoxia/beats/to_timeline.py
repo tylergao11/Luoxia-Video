@@ -114,7 +114,7 @@ def build_timeline_draft(
         shot["index"] = i
 
     return {
-        "schema_version": "1.1.0",
+        "schema_version": "1.2.0",
         "project_id": beats_doc.get("work_id"),
         "episode_id": episode_id,
         "title": episode.get("title") or beats_doc.get("title"),
@@ -154,6 +154,7 @@ def _timeline_cast_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
         "character_id": entry["character_id"],
         "display_name": entry.get("display_name") or entry["character_id"],
         "voice_id": voice_id,
+        "tts_provider": "qwen3.tts",
         "reference_image_asset_id": entry.get("reference_image_path"),
     }
 
@@ -287,9 +288,11 @@ def _dialogue_shot(
             "source_text": None,
             "rewrite_count": 0,
             "emotion": line.get("delivery"),
+            "performance": line.get("performance"),
         },
         "audio": {
             "status": "pending",
+            "provider": "qwen3",
             "voice_id": cast_entry.get("voice_id"),
             "speed": 1.0,
         },

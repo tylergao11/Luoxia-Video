@@ -3037,9 +3037,9 @@ class VoicePreviewRequest(BaseModel):
 def voice_preview(request: VoicePreviewRequest):
     """Generate or fetch cached preview audio for a voice.
 
-    Cache key = md5(voice_id|text|speed|pitch|volume|instructions). First
-    call triggers TTSProcessor.synthesize() and writes to
-    output/cache/voice_preview/{key}.mp3. Subsequent identical calls
+    Cache key includes the speech compiler contract plus every request input. First
+    call triggers the selected provider and writes a WAV (Qwen3/xAI) or MP3
+    (legacy DashScope) under output/cache/voice_preview/. Subsequent identical calls
     return the cached URL instantly.
 
     PR-3h #2: handles CUSTOM voices (clones/designs) by looking up
@@ -3049,10 +3049,10 @@ def voice_preview(request: VoicePreviewRequest):
     Spec: r2v-workflow-v3-unified.md §4.2.3 (cache strategy) + Q5 b/c.
     """
     import hashlib
-    if not pipeline.audio_generator.tts:
+    if not pipeline.audio_generator.has_tts_for_voice(request.voice_id):
         raise HTTPException(
             status_code=503,
-            detail="TTS service unavailable. Check DASHSCOPE_API_KEY configuration.",
+            detail="TTS service unavailable. Check the active provider login or API key.",
         )
 
     # PR-3h #2: resolve custom voice → target_model/family override
@@ -3063,19 +3063,20 @@ def voice_preview(request: VoicePreviewRequest):
     cache_dir = "output/cache/voice_preview"
     os.makedirs(cache_dir, exist_ok=True)
     cache_key = hashlib.md5(
-        f"{request.voice_id}|{request.text}|{request.speed}|{request.pitch}|{request.volume}|{request.instructions or ''}".encode("utf-8")
+        f"speech-v3|{request.voice_id}|{request.text}|{request.speed}|{request.pitch}|{request.volume}|{request.instructions or ''}".encode("utf-8")
     ).hexdigest()
-    cache_path = os.path.join(cache_dir, f"{cache_key}.mp3")
+    extension = pipeline.audio_generator.preview_extension(request.voice_id)
+    cache_path = os.path.join(cache_dir, f"{cache_key}{extension}")
     cached = os.path.exists(cache_path)
 
     if not cached:
         try:
-            pipeline.audio_generator.tts.synthesize(
+            pipeline.audio_generator.synthesize_preview(
                 text=request.text,
                 output_path=cache_path,
-                voice=request.voice_id,
-                speech_rate=request.speed,
-                pitch_rate=request.pitch,
+                voice_id=request.voice_id,
+                speed=request.speed,
+                pitch=request.pitch,
                 volume=request.volume,
                 instructions=request.instructions,
                 model_override=model_override,
@@ -3088,7 +3089,7 @@ def voice_preview(request: VoicePreviewRequest):
     # Static mount /files maps to output/, so the relative path under output/
     # becomes the URL path frontend can hit. signed_response wraps for OSS
     # signing when configured, no-op otherwise.
-    url = f"cache/voice_preview/{cache_key}.mp3"
+    url = f"cache/voice_preview/{cache_key}{extension}"
     return signed_response({"url": url, "cached": cached})
 
 

@@ -1,7 +1,7 @@
 """xAI subscription-pool session adapter (default pool provider — swappable).
 
 Login options (no pay-per-call API key paste required for session mode):
-1. Grok login — reuse Grok CLI session from ~/.Doggy/auth.json (same OAuth store)
+1. Grok login — reuse the current Grok CLI session from ~/.grok/auth.json
 2. Paste an OAuth access_token (+ optional refresh_token) into local session store
 3. Device/OAuth full browser flow can be added later without changing pipeline
 
@@ -23,14 +23,21 @@ _PROVIDER_ID = "xai_pool"
 _DEFAULT_BASE = "https://api.x.ai/v1"
 
 
-def _doggy_auth_path() -> Path:
-    override = os.getenv("DOGGY_AUTH_JSON") or os.getenv("GROK_AUTH_JSON")
+def _grok_auth_paths() -> list[Path]:
+    override = os.getenv("GROK_AUTH_JSON") or os.getenv("DOGGY_AUTH_JSON")
     if override:
-        return Path(override)
-    return Path.home() / ".Doggy" / "auth.json"
+        return [Path(override)]
+    # New Grok CLI builds own ~/.grok/auth.json.  Older builds wrote ~/.Doggy;
+    # both remain readable so an installation can migrate without copying secrets.
+    return [Path.home() / ".grok" / "auth.json", Path.home() / ".Doggy" / "auth.json"]
 
 
-def _parse_doggy_auth(path: Path) -> Optional[Dict[str, Any]]:
+def _grok_auth_path() -> Path:
+    existing = [path for path in _grok_auth_paths() if path.is_file()]
+    return max(existing, key=lambda path: path.stat().st_mtime_ns) if existing else _grok_auth_paths()[0]
+
+
+def _parse_grok_auth(path: Path) -> Optional[Dict[str, Any]]:
     if not path.is_file():
         return None
     try:
@@ -61,7 +68,7 @@ def _parse_doggy_auth(path: Path) -> Optional[Dict[str, Any]]:
         "expires_at": best.get("expires_at"),
         "email": best.get("email"),
         "user_id": best.get("user_id") or best.get("principal_id"),
-        "source": "doggy_auth_json",
+        "source": "grok_auth_json",
         "oidc_issuer": best.get("oidc_issuer"),
         "oidc_client_id": best.get("oidc_client_id"),
     }
@@ -94,6 +101,27 @@ def _session_expired(session: Dict[str, Any], *, skew_s: float = 60.0) -> bool:
     return time.time() >= (exp - skew_s)
 
 
+def _best_grok_session() -> Optional[Dict[str, Any]]:
+    candidates = []
+    for path in _grok_auth_paths():
+        parsed = _parse_grok_auth(path)
+        if parsed and parsed.get("access_token"):
+            candidates.append((parsed, path.stat().st_mtime_ns if path.is_file() else 0))
+    if not candidates:
+        return None
+    # A valid token always beats a newer expired file; among equally valid stores choose
+    # the furthest expiry, then the latest write.
+    candidates.sort(
+        key=lambda item: (
+            not _session_expired(item[0]),
+            _parse_expiry(item[0].get("expires_at")),
+            item[1],
+        ),
+        reverse=True,
+    )
+    return candidates[0][0]
+
+
 class XaiPoolAuthProvider:
     id = _PROVIDER_ID
     display_name = "Grok subscription pool (session)"
@@ -101,7 +129,7 @@ class XaiPoolAuthProvider:
     def status(self) -> Dict[str, Any]:
         session = self._load_effective_session()
         if not session or not session.get("access_token"):
-            grok_store = _doggy_auth_path()
+            grok_store = _grok_auth_path()
             return {
                 "signed_in": False,
                 "label": None,
@@ -127,10 +155,10 @@ class XaiPoolAuthProvider:
         action = (payload.get("action") or "grok_login").strip().lower()
 
         if action in ("grok_login", "grok", "import_doggy", "import", "sync"):
-            imported = _parse_doggy_auth(_doggy_auth_path())
+            imported = _best_grok_session()
             if not imported or not imported.get("access_token"):
                 raise LoginRequiredError(
-                    f"No Grok session at {_doggy_auth_path()}. "
+                    f"No Grok session at {_grok_auth_path()}. "
                     "Run `grok login` first, then click Grok login here "
                     "(or pass action=token with access_token)."
                 )
@@ -191,7 +219,7 @@ class XaiPoolAuthProvider:
         if local and local.get("access_token") and not _session_expired(local):
             return local
         # Live import from Doggy if local missing/expired
-        imported = _parse_doggy_auth(_doggy_auth_path())
+        imported = _best_grok_session()
         if imported and imported.get("access_token") and not _session_expired(imported):
             # Cache a copy so status is stable
             try:

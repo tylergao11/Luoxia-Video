@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from src.audio.xai_tts import voices_for_gender
+from src.audio.performance import normalize_performance
+from src.audio.qwen3_tts import voices_for_gender
 from src.luoxia.beats import repairs as repair_log
 from src.luoxia.beats.prompts import (
     ANALYZE_CARRYOVER_TEMPLATE,
@@ -92,7 +93,7 @@ def analyze_novel(
 
     paragraphs = split_paragraphs(body)
     doc: Dict[str, Any] = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.2.0",
         "work_id": wid,
         "title": title or wid,
         "phase": "scored",
@@ -446,6 +447,7 @@ def _normalize_beats(
                     "character_id": cid,
                     "text": t,
                     "delivery": ln.get("delivery"),
+                    "performance": normalize_performance(t, ln.get("performance")),
                     "shot_size": size if size in SHOT_SIZES else "medium",
                     "line_type": "narration" if ln.get("line_type") == "narration" else "dialogue",
                 }

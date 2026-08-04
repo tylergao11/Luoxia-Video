@@ -1,6 +1,7 @@
 """Auth provider registry — add a new pool by registering an adapter, not forking pipeline."""
 from __future__ import annotations
 
+import threading
 from typing import Dict, List, Type
 
 from .base import AuthProvider
@@ -52,18 +53,24 @@ def list_providers() -> List[Dict[str, str]]:
 
 
 _BUILTINS_LOADED = False
+_BUILTINS_LOCK = threading.Lock()
 
 
 def ensure_builtin_providers() -> None:
     global _BUILTINS_LOADED
     if _BUILTINS_LOADED:
         return
-    _BUILTINS_LOADED = True
-    # Lazy import to avoid cycles
-    from .providers.xai_pool import XaiPoolAuthProvider
-    from .providers.api_key_bundle import ApiKeyBundleProvider
-    from .providers.offline import OfflineAuthProvider
+    with _BUILTINS_LOCK:
+        if _BUILTINS_LOADED:
+            return
+        # Set the ready flag only after every class is registered.  Setting it before
+        # lazy imports let a concurrent TTS request observe an empty registry and fail
+        # with "Known: (none)" while the first request was still importing providers.
+        from .providers.xai_pool import XaiPoolAuthProvider
+        from .providers.api_key_bundle import ApiKeyBundleProvider
+        from .providers.offline import OfflineAuthProvider
 
-    register_provider_class("xai_pool", XaiPoolAuthProvider)
-    register_provider_class("api_key_bundle", ApiKeyBundleProvider)
-    register_provider_class("offline", OfflineAuthProvider)
+        register_provider_class("xai_pool", XaiPoolAuthProvider)
+        register_provider_class("api_key_bundle", ApiKeyBundleProvider)
+        register_provider_class("offline", OfflineAuthProvider)
+        _BUILTINS_LOADED = True

@@ -6,8 +6,10 @@
 
 | 变量 | 用途 | 是否必须 |
 | --- | --- | --- |
-| `DASHSCOPE_API_KEY` | LLM 切片打分、TTS、静帧（Wanx） | 必须 |
-| `XAI_API_KEY` | Grok 视频，**仅 api_key 模式需要** | 走订阅池登录时不需要，见下 |
+| 订阅池登录或 `XAI_API_KEY` | Luoxia LLM、图片与 Grok 视频，取决于当前鉴权模式 | 必须二选一 |
+| `output/runtime/qwen3-tts` | 本地 Qwen3-TTS VoiceDesign 配音 | 默认 TTS 必需 |
+| `output/runtime/musetalk` | MuseTalk 1.5 音频驱动口型 | 特写对白镜必需 |
+| `DASHSCOPE_API_KEY` | 仍选择 DashScope 的旧工作流或模型 | Luoxia 主链不需要 |
 
 **视频凭据有两条路**，管线问的是鉴权层（`src/auth`）而不是环境变量：
 
@@ -16,9 +18,13 @@
 
 查当前状态：`python -c "from src.auth.resolver import status; print(status())"`。
 
+新版 Grok CLI 的 OAuth 会话位于 `~/.grok/auth.json`；鉴权适配器读取最新的该文件，旧版 `~/.Doggy/auth.json` 只作为历史位置兜底。网页重新登录后如果状态仍显示过期，先确认程序没有继续读取旧文件。
+
 凭据取不到时管线**直接报错停下**，不会降级出片。曾经的行为是缺 `XAI_API_KEY` 就悄悄把静帧定住几秒当成片——一个登录着订阅池的账号会被误判成"没配置"，最后拿到一段不会动的幻灯片，而 phase 照样写 `rendered`、退出码照样是 0。静帧定格模式已经删除：**没有真视频就不出片**。
 
-`.env` 由 `src/luoxia/env.py` 在 CLI / 管线入口加载。以前只有 `src/config.py` 调 `load_dotenv()`，而 luoxia 不 import 它，所以命令行跑的时候整个包看不见 `DASHSCOPE_API_KEY`——有一次因此判定"TTS 不可用"，用 ffmpeg 生成的音调冒充了整集配音。
+`lipsync.required=true` 同样是硬合同：缺视频、缺锁定音频、MuseTalk 运行时不完整或推理失败时，管线记录失败镜头后停止，禁止绕过口型继续合成成片。
+
+`.env` 由 `src/luoxia/env.py` 在 CLI / 管线入口加载。本地 Qwen3-TTS 运行时或模型缺失时，TTS 会明确失败；禁止用静音、音调或默认音色冒充成功。
 
 可选 LLM 切换（默认 DashScope）：
 
@@ -77,6 +83,7 @@ analyze → select → [quality gate] → character sheets → bridge
 
 - **beats** 决定砍什么；**timeline** 决定多久。
 - 时长只来自 TTS 实测，不来自字数估算。
+- 表演只来自 `dialogue.performance`（旧文件回退到 `dialogue.emotion`）；供应商标签不进入字幕和口型文本。
 - `freeze` 超预算会停（exit code 2），不会偷偷开跑贵视频。
 - `--max-repair-severity` 超标会停（`beats-select` exit code 3），停在花钱之前。
 

@@ -66,6 +66,7 @@
     "tabDesign": "My Designs",
     "recommended": "Recommended",
     "basedOnCharacter": "based on character ({gender})",
+    "groupXai": "xAI expressive voices",
     "groupCosyvoice": "CosyVoice standard",
     "groupStandardZh": "Qwen3-TTS standard",
     "groupDialect": "Dialect",
