@@ -4,7 +4,7 @@ from typing import Dict, Mapping, Optional, Sequence, Tuple
 
 from .model_catalog import build_provider_family_configs, load_generated_model_catalog
 
-SUPPORTED_PROVIDER_BACKENDS = ("dashscope", "vendor", "mulerouter")
+SUPPORTED_PROVIDER_BACKENDS = ("dashscope", "vendor", "mulerouter", "xai")
 
 
 @dataclass
@@ -63,6 +63,20 @@ class ProviderRegistry:
 
 
 DEFAULT_PROVIDER_FAMILIES: Tuple[ProviderFamilyConfig, ...] = (
+    ProviderFamilyConfig(
+        model_family="grok-imagine-video-",
+        backend_default="xai",
+        backend_env_key="XAI_PROVIDER_MODE",
+        credential_sources={
+            "xai": ("XAI_API_KEY",),
+        },
+        supported_modalities=("t2v", "i2v", "r2v"),
+        image_input_mode={
+            "xai": "public_url",
+        },
+        audio_input_mode={},
+        reference_video_input_mode={},
+    ),
     ProviderFamilyConfig(
         model_family="wan2.7-",
         backend_default="dashscope",

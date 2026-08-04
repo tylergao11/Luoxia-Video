@@ -5,8 +5,9 @@ Converts text to speech audio for use in video lip-sync.
 Supports cosyvoice-v2 and cosyvoice-v3-flash/v3-plus models.
 See: https://help.aliyun.com/zh/model-studio/cosyvoice-python-sdk
 """
-import os
+import hashlib
 import logging
+import os
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -366,3 +367,50 @@ class TTSProcessor:
     def list_voices():
         """List available voices with metadata"""
         return VOICES
+
+    @staticmethod
+    def content_sha256(text: str, voice_id: str, speed: float) -> str:
+        """Content hash for idempotent TTS: text + voice + speed."""
+        payload = f"{text}\0{voice_id}\0{float(speed):.6f}".encode("utf-8")
+        return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+    def synthesize_measured(
+        self,
+        text: str,
+        output_path: str,
+        voice: Optional[str] = None,
+        speech_rate: float = 1.0,
+        **kwargs,
+    ) -> Tuple[str, float, str]:
+        """Synthesize and return (path, measured_duration_s, content_sha256).
+
+        Duration is always probed from the written file (ffprobe). Never estimated.
+        If output_path already exists with matching content hash sidecar, skip API.
+        """
+        from src.luoxia.media.ffprobe import measure_media_duration_s
+
+        voice = voice or self.voice
+        digest = self.content_sha256(text, voice, speech_rate)
+        meta_path = output_path + ".sha256"
+
+        if os.path.isfile(output_path) and os.path.isfile(meta_path):
+            try:
+                existing = open(meta_path, "r", encoding="utf-8").read().strip()
+            except OSError:
+                existing = ""
+            if existing == digest:
+                measured = measure_media_duration_s(output_path)
+                logger.info("TTS cache hit %s (%.3fs)", output_path, measured)
+                return output_path, measured, digest
+
+        self.synthesize(
+            text=text,
+            output_path=output_path,
+            voice=voice,
+            speech_rate=speech_rate,
+            **kwargs,
+        )
+        measured = measure_media_duration_s(output_path)
+        with open(meta_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(digest + "\n")
+        return output_path, measured, digest

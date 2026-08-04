@@ -354,6 +354,16 @@ class ComicGenPipeline:
             return True
 
     def _resolve_video_backend(self, model_name: str) -> str:
+        normalized = (model_name or "").strip().lower()
+        # Never silently remap xAI models to dashscope — that masks mis-registration.
+        if normalized.startswith("grok-imagine-video"):
+            try:
+                return resolve_provider_backend(model_name)
+            except (KeyError, ValueError) as e:
+                raise ValueError(
+                    f"Provider backend not registered for video model {model_name}; "
+                    "expected backend 'xai'."
+                ) from e
         try:
             return resolve_provider_backend(model_name)
         except (KeyError, ValueError):
@@ -370,6 +380,32 @@ class ComicGenPipeline:
                 e,
             )
             return "dashscope"
+
+    def _resolve_duration_from_timeline(
+        self, script_id: str, frame_id: Optional[str]
+    ) -> Optional[int]:
+        """Luoxia single source of truth: timeline.json request_duration_s."""
+        if not frame_id:
+            return None
+        from pathlib import Path
+        from src.luoxia.timeline.io import load_timeline
+        from src.luoxia.render.duration import require_request_duration
+
+        for candidate in (
+            Path("output") / script_id / "timeline.json",
+            Path("output") / script_id / "timeline.frozen.json",
+        ):
+            if not candidate.is_file():
+                continue
+            timeline = load_timeline(candidate)
+            # Prefer shot_id == frame_id; also accept frame_id stored on video.request.
+            try:
+                return require_request_duration(timeline, frame_id)
+            except KeyError:
+                for shot in timeline.get("shots") or []:
+                    if shot.get("shot_id") == frame_id or (shot.get("video") or {}).get("frame_id") == frame_id:
+                        return require_request_duration(timeline, shot["shot_id"])
+        return None
 
     # ... (existing methods)
 
@@ -856,8 +892,10 @@ class ComicGenPipeline:
 
     def create_motion_ref_task(self, script_id: str, asset_id: str, asset_type: str, 
                                 prompt: Optional[str] = None, audio_url: Optional[str] = None, 
-                                duration: int = 5, batch_size: int = 1) -> Tuple[Script, str]:
+                                duration: Optional[int] = None, batch_size: int = 1) -> Tuple[Script, str]:
         """Creates an async motion reference generation task."""
+        if duration is None:
+            raise ValueError("duration is required (no hardcoded default)")
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
@@ -1791,7 +1829,7 @@ class ComicGenPipeline:
         asset_type: str,  # 'full_body' | 'head_shot' for characters; 'scene' | 'prop' for scenes and props
         prompt: Optional[str] = None,
         audio_url: Optional[str] = None,
-        duration: int = 5,
+        duration: Optional[int] = None,
         batch_size: int = 1
     ) -> Script:
         """Generate Motion Reference video for an asset (Character Full Body/Headshot, Scene, or Prop).
@@ -1802,9 +1840,11 @@ class ComicGenPipeline:
             asset_type: 'full_body' | 'head_shot' for characters; 'scene' or 'prop' for scenes and props
             prompt: Custom prompt for motion generation
             audio_url: URL of driving audio for lip-sync
-            duration: Video duration in seconds (5 or 10)
+            duration: Video duration in seconds (required; no hardcoded default)
             batch_size: Number of videos to generate
         """
+        if duration is None:
+            raise ValueError("duration is required (no hardcoded default)")
         from .models import VideoVariant, AssetUnit, VideoTask
 
         script = self.scripts.get(script_id)
@@ -2076,11 +2116,24 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None) -> Tuple[Script, str]:
-        """Creates a new video generation task."""
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: Optional[int] = None, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None) -> Tuple[Script, str]:
+        """Creates a new video generation task.
+
+        Duration has no hardcoded default. When a Luoxia timeline exists for the
+        project/frame, timeline.request_duration_s wins (single source of truth).
+        """
         script = self.get_script(script_id)
         if not script:
             raise ValueError("Script not found")
+
+        timeline_duration = self._resolve_duration_from_timeline(script_id, frame_id)
+        if timeline_duration is not None:
+            duration = timeline_duration
+        if duration is None:
+            raise ValueError(
+                "duration is required; supply timing.request_duration_s from timeline.json "
+                "(no hardcoded default)"
+            )
         
         task_id = str(uuid.uuid4())
         
@@ -3134,8 +3187,10 @@ class ComicGenPipeline:
         
         return "FFmpeg merge failed with unknown error. Please check the application logs for details."
 
-    def create_asset_video_task(self, script_id: str, asset_id: str, asset_type: str, prompt: str, duration: int = 5, aspect_ratio: str = None) -> Tuple[Script, str]:
+    def create_asset_video_task(self, script_id: str, asset_id: str, asset_type: str, prompt: str, duration: Optional[int] = None, aspect_ratio: str = None) -> Tuple[Script, str]:
         """Creates a new video generation task for an asset (R2V)."""
+        if duration is None:
+            raise ValueError("duration is required (no hardcoded default)")
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")

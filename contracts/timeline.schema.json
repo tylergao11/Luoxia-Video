@@ -244,7 +244,14 @@
           "description": "必须与 global.aspect_ratio 一致。Grok I2V 传 aspect_ratio 会拉伸源图，所以比例必须在出图阶段就做对。"
         },
         "prompt": { "type": ["string", "null"] },
-        "attempts": { "type": "integer", "minimum": 0, "default": 0 }
+        "negative_prompt": { "type": ["string", "null"], "description": "出图负向词。与 prompt 一起决定静帧，属于可复现的请求快照。" },
+        "reference_image_paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "角色定妆图路径。同一角色跨镜复用同一张底图，是保证不换脸的唯一手段。"
+        },
+        "attempts": { "type": "integer", "minimum": 0, "default": 0 },
+        "error": { "type": ["string", "null"] }
       }
     },
     "video": {

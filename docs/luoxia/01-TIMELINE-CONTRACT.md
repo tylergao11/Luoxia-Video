@@ -74,6 +74,8 @@ draft ──► audio_locked ──► frozen ──► rendering ──► rend
 14. `phase >= frozen` 时，`timeline_hash` 与 `frozen_at` 非空
 15. 字幕区间必须包含在镜头区间内：`start_s <= subtitle.start_s` 且 `subtitle.end_s <= end_s`
 
+`phase == "draft"` 是例外。草稿由 `beats-bridge` 生成，此时还没跑 TTS，所有时长字段按设计就是空的——拿完整契约去校验它只会报一屏「缺少 start_s」。所以校验器对草稿走一档放宽档位：放开 `timing` 的必填约束，只跑第 4、9、10、12、13 条这些与时长无关的结构检查。拼错 `character_id`、画幅和 `global` 对不上，依然会在花掉第一分钱之前被拦下。
+
 ## 5. 调和算法（solver）
 
 对每个 `timing_driver == "audio"` 的镜头执行。这是把 audio-first 从口号变成代码的地方。

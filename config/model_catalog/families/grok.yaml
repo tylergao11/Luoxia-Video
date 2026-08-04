@@ -1,24 +1,4 @@
-# ============================================================================
-# 草案 —— 尚未生效
-#
-# 目标位置：config/model_catalog/families/grok.yaml
-#
-# 这是按 config/model_catalog/schema/model-catalog.schema.json 与 wan.yaml 的
-# 既有结构手工编写的草案，尚未经过校验器验证。落地步骤：
-#
-#   1. 复制到 config/model_catalog/families/grok.yaml
-#   2. python scripts/build_model_catalog.py
-#   3. python scripts/validate_model_catalog.py
-#   4. 校验若报错，以 schema 为准修正本文件，并把修正结果同步回本草案
-#   5. 生成物 config/model_catalog/generated/model_catalog.json 必须一并提交
-#
-# 参数命名遵循 lumenx 内部约定（ratio / resolution），不使用 xAI 的原生字段名。
-# 到 xAI 方言的翻译在 src/models/grok.py 内完成：
-#   ratio      -> aspect_ratio   （I2V 下通常应省略，见 02-PROVIDER-CONTRACT.md 坑二）
-#   resolution -> resolution
-#   duration   -> duration
-# ============================================================================
-
+# Generated from docs/luoxia/drafts/grok.yaml — keep in sync
 family: grok
 display_name: "Grok Imagine (xAI)"
 provider: xai

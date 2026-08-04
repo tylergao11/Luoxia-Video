@@ -2,6 +2,9 @@
   "compat": {
     "legacy_model_ids": {
       "gpt-image-2": "gpt-image/gpt-image-2#image",
+      "grok-imagine-video-1.5-i2v": "grok/grok-imagine-video-1.5#i2v",
+      "grok-imagine-video-1.5-r2v": "grok/grok-imagine-video-1.5#r2v",
+      "grok-imagine-video-1.5-t2v": "grok/grok-imagine-video-1.5#t2v",
       "happyhorse-1.0-video-edit": "happyhorse/happyhorse-1.0-video-edit#i2v",
       "happyhorse-1.1-i2v": "happyhorse/happyhorse-1.1-video#i2v",
       "happyhorse-1.1-r2v": "happyhorse/happyhorse-1.1-video#r2v",
@@ -98,6 +101,46 @@
         "reference_video_input_mode": {
           "mulerouter": "mulerouter_video_url"
         }
+      }
+    },
+    "grok": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "xai": [
+          "XAI_API_KEY"
+        ]
+      },
+      "default_backend": "xai",
+      "display_name": "Grok Imagine (xAI)",
+      "docs": {
+        "official_snapshot_ids": [
+          "xai/imagine-video/2026-08-04"
+        ]
+      },
+      "family": "grok",
+      "models": [
+        "grok-imagine-video-1.5-i2v",
+        "grok-imagine-video-1.5-r2v",
+        "grok-imagine-video-1.5-t2v"
+      ],
+      "provider": "xai",
+      "routing_prefixes": [
+        "grok-imagine-video-"
+      ],
+      "supported_backends": [
+        "xai"
+      ],
+      "supported_modalities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {},
+        "image_input_mode": {
+          "xai": "public_url"
+        },
+        "reference_video_input_mode": {}
       }
     },
     "happyhorse": {
@@ -506,6 +549,64 @@
         "reference_video_input_mode": {
           "mulerouter": "mulerouter_video_url"
         }
+      }
+    },
+    "grok/grok-imagine-video-1.5": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "xai": [
+          "XAI_API_KEY"
+        ]
+      },
+      "default_backend": "xai",
+      "description": "xAI 图生视频，异步提交轮询；成片默认带音轨需剥离；输出 URL 为临时地址",
+      "display_name": "Grok Imagine Video 1.5",
+      "docs": {
+        "context_hub_doc_ids": [
+          "xai/imagine-video"
+        ],
+        "official_snapshot_ids": [
+          "xai/imagine-video/2026-08-04"
+        ]
+      },
+      "family": "grok",
+      "id": "grok/grok-imagine-video-1.5",
+      "legacy_model_ids": [
+        "grok-imagine-video-1.5-i2v",
+        "grok-imagine-video-1.5-r2v",
+        "grok-imagine-video-1.5-t2v"
+      ],
+      "modes": [
+        "grok/grok-imagine-video-1.5#i2v",
+        "grok/grok-imagine-video-1.5#r2v",
+        "grok/grok-imagine-video-1.5#t2v"
+      ],
+      "provider": "xai",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "grok-imagine-video-"
+      ],
+      "runtime": {
+        "xai": {
+          "api_model_id": "grok-imagine-video-1.5",
+          "gateway": "xai"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "xai"
+      ],
+      "supported_modalities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {},
+        "image_input_mode": {
+          "xai": "public_url"
+        },
+        "reference_video_input_mode": {}
       }
     },
     "happyhorse/happyhorse-1.0-video-edit": {
@@ -2223,6 +2324,267 @@
         "visible_in": [
           "project_settings",
           "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "grok-imagine-video-1.5-i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "i2v"
+      ],
+      "credential_sources": {
+        "xai": [
+          "XAI_API_KEY"
+        ]
+      },
+      "default_backend": "xai",
+      "description": "以静帧为首帧生成运动镜头，本项目主力模式",
+      "display_name": "Grok Imagine 1.5 I2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "xai/imagine-video"
+        ],
+        "official_snapshot_ids": [
+          "xai/imagine-video/2026-08-04"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 1,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "grok",
+      "id": "grok-imagine-video-1.5-i2v",
+      "inputs": {
+        "reference_images": {
+          "max": 1,
+          "reference_type": "image"
+        }
+      },
+      "params": {
+        "negativePrompt": false,
+        "promptExtend": false,
+        "ratio": {
+          "default": "9:16",
+          "options": [
+            "9:16",
+            "16:9",
+            "1:1",
+            "4:3",
+            "3:4",
+            "3:2",
+            "2:3"
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p",
+            "1080p"
+          ]
+        },
+        "seed": false,
+        "watermark": false
+      },
+      "provider": "xai",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "grok-imagine-video-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "xai"
+      ],
+      "transport": {
+        "audio_input_mode": {},
+        "image_input_mode": {
+          "xai": "public_url"
+        },
+        "reference_video_input_mode": {}
+      },
+      "ui": {
+        "badges": [
+          "latest"
+        ],
+        "order": 70,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "grok-imagine-video-1.5-r2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "r2v"
+      ],
+      "credential_sources": {
+        "xai": [
+          "XAI_API_KEY"
+        ]
+      },
+      "default_backend": "xai",
+      "description": "参考图引导生成。注意 R2V 分辨率上限为 720p，且不可与 image 同时使用",
+      "display_name": "Grok Imagine 1.5 R2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "xai/imagine-video"
+        ],
+        "official_snapshot_ids": [
+          "xai/imagine-video/2026-08-04"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 1,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "grok",
+      "id": "grok-imagine-video-1.5-r2v",
+      "inputs": {
+        "reference_images": {
+          "max": 3,
+          "reference_type": "image"
+        }
+      },
+      "params": {
+        "negativePrompt": false,
+        "promptExtend": false,
+        "ratio": {
+          "default": "9:16",
+          "options": [
+            "9:16",
+            "16:9",
+            "1:1"
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p"
+          ]
+        },
+        "seed": false,
+        "watermark": false
+      },
+      "provider": "xai",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "grok-imagine-video-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "xai"
+      ],
+      "transport": {
+        "audio_input_mode": {},
+        "image_input_mode": {
+          "xai": "public_url"
+        },
+        "reference_video_input_mode": {}
+      },
+      "ui": {
+        "badges": [],
+        "order": 70,
+        "recommended": false,
+        "selection_group": "r2v",
+        "visible_in": [
+          "project_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "grok-imagine-video-1.5-t2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v"
+      ],
+      "credential_sources": {
+        "xai": [
+          "XAI_API_KEY"
+        ]
+      },
+      "default_backend": "xai",
+      "description": "纯文生视频，用于空镜与转场兜底",
+      "display_name": "Grok Imagine 1.5 T2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "xai/imagine-video"
+        ],
+        "official_snapshot_ids": [
+          "xai/imagine-video/2026-08-04"
+        ]
+      },
+      "duration": {
+        "default": 4,
+        "max": 15,
+        "min": 1,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "grok",
+      "id": "grok-imagine-video-1.5-t2v",
+      "inputs": {},
+      "params": {
+        "negativePrompt": false,
+        "promptExtend": false,
+        "ratio": {
+          "default": "9:16",
+          "options": [
+            "9:16",
+            "16:9",
+            "1:1",
+            "4:3",
+            "3:4",
+            "3:2",
+            "2:3"
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p",
+            "1080p"
+          ]
+        },
+        "seed": false,
+        "watermark": false
+      },
+      "provider": "xai",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "grok-imagine-video-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "xai"
+      ],
+      "transport": {
+        "audio_input_mode": {},
+        "image_input_mode": {
+          "xai": "public_url"
+        },
+        "reference_video_input_mode": {}
+      },
+      "ui": {
+        "badges": [],
+        "order": 70,
+        "recommended": false,
+        "selection_group": "t2v",
+        "visible_in": [
+          "project_settings",
           "global_settings"
         ]
       }
@@ -5272,6 +5634,294 @@
         "visible_in": [
           "project_settings",
           "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "grok/grok-imagine-video-1.5#i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "i2v"
+      ],
+      "credential_sources": {
+        "xai": [
+          "XAI_API_KEY"
+        ]
+      },
+      "default_backend": "xai",
+      "description": "以静帧为首帧生成运动镜头，本项目主力模式",
+      "display_name": "Grok Imagine 1.5 I2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "xai/imagine-video"
+        ],
+        "official_snapshot_ids": [
+          "xai/imagine-video/2026-08-04"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 1,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "grok",
+      "id": "grok/grok-imagine-video-1.5#i2v",
+      "inputs": {
+        "reference_images": {
+          "max": 1,
+          "reference_type": "image"
+        }
+      },
+      "legacy_model_id": "grok-imagine-video-1.5-i2v",
+      "mode": "i2v",
+      "model_line_id": "grok/grok-imagine-video-1.5",
+      "params": {
+        "negativePrompt": false,
+        "promptExtend": false,
+        "ratio": {
+          "default": "9:16",
+          "options": [
+            "9:16",
+            "16:9",
+            "1:1",
+            "4:3",
+            "3:4",
+            "3:2",
+            "2:3"
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p",
+            "1080p"
+          ]
+        },
+        "seed": false,
+        "watermark": false
+      },
+      "provider": "xai",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "grok-imagine-video-"
+      ],
+      "runtime": {
+        "xai": {
+          "api_model_id": "grok-imagine-video-1.5",
+          "gateway": "xai"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "xai"
+      ],
+      "transport": {
+        "audio_input_mode": {},
+        "image_input_mode": {
+          "xai": "public_url"
+        },
+        "reference_video_input_mode": {}
+      },
+      "ui": {
+        "badges": [
+          "latest"
+        ],
+        "order": 70,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "grok/grok-imagine-video-1.5#r2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "r2v"
+      ],
+      "credential_sources": {
+        "xai": [
+          "XAI_API_KEY"
+        ]
+      },
+      "default_backend": "xai",
+      "description": "参考图引导生成。注意 R2V 分辨率上限为 720p，且不可与 image 同时使用",
+      "display_name": "Grok Imagine 1.5 R2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "xai/imagine-video"
+        ],
+        "official_snapshot_ids": [
+          "xai/imagine-video/2026-08-04"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 1,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "grok",
+      "id": "grok/grok-imagine-video-1.5#r2v",
+      "inputs": {
+        "reference_images": {
+          "max": 3,
+          "reference_type": "image"
+        }
+      },
+      "legacy_model_id": "grok-imagine-video-1.5-r2v",
+      "mode": "r2v",
+      "model_line_id": "grok/grok-imagine-video-1.5",
+      "params": {
+        "negativePrompt": false,
+        "promptExtend": false,
+        "ratio": {
+          "default": "9:16",
+          "options": [
+            "9:16",
+            "16:9",
+            "1:1"
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p"
+          ]
+        },
+        "seed": false,
+        "watermark": false
+      },
+      "provider": "xai",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "grok-imagine-video-"
+      ],
+      "runtime": {
+        "xai": {
+          "api_model_id": "grok-imagine-video-1.5",
+          "gateway": "xai"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "xai"
+      ],
+      "transport": {
+        "audio_input_mode": {},
+        "image_input_mode": {
+          "xai": "public_url"
+        },
+        "reference_video_input_mode": {}
+      },
+      "ui": {
+        "badges": [],
+        "order": 70,
+        "recommended": false,
+        "selection_group": "r2v",
+        "visible_in": [
+          "project_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "grok/grok-imagine-video-1.5#t2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v"
+      ],
+      "credential_sources": {
+        "xai": [
+          "XAI_API_KEY"
+        ]
+      },
+      "default_backend": "xai",
+      "description": "纯文生视频，用于空镜与转场兜底",
+      "display_name": "Grok Imagine 1.5 T2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "xai/imagine-video"
+        ],
+        "official_snapshot_ids": [
+          "xai/imagine-video/2026-08-04"
+        ]
+      },
+      "duration": {
+        "default": 4,
+        "max": 15,
+        "min": 1,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "grok",
+      "id": "grok/grok-imagine-video-1.5#t2v",
+      "inputs": {},
+      "legacy_model_id": "grok-imagine-video-1.5-t2v",
+      "mode": "t2v",
+      "model_line_id": "grok/grok-imagine-video-1.5",
+      "params": {
+        "negativePrompt": false,
+        "promptExtend": false,
+        "ratio": {
+          "default": "9:16",
+          "options": [
+            "9:16",
+            "16:9",
+            "1:1",
+            "4:3",
+            "3:4",
+            "3:2",
+            "2:3"
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p",
+            "1080p"
+          ]
+        },
+        "seed": false,
+        "watermark": false
+      },
+      "provider": "xai",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "grok-imagine-video-"
+      ],
+      "runtime": {
+        "xai": {
+          "api_model_id": "grok-imagine-video-1.5",
+          "gateway": "xai"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "xai"
+      ],
+      "transport": {
+        "audio_input_mode": {},
+        "image_input_mode": {
+          "xai": "public_url"
+        },
+        "reference_video_input_mode": {}
+      },
+      "ui": {
+        "badges": [],
+        "order": 70,
+        "recommended": false,
+        "selection_group": "t2v",
+        "visible_in": [
+          "project_settings",
           "global_settings"
         ]
       }

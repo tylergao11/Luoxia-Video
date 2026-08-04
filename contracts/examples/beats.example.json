@@ -1,0 +1,292 @@
+{
+  "schema_version": "1.0.0",
+  "work_id": "luoxia_demo",
+  "title": "废物千金 · 第一章",
+  "phase": "selected",
+  "selected_at": "2026-08-04T14:05:00+08:00",
+  "beats_hash": "sha256:a3cec4663cfa3594c402247c5ef701e87bebac69199807a523b968f981f39037",
+  "source": {
+    "source_id": "ch001",
+    "title": "第一章 拍卖会",
+    "uri": "input/novels/feiwuqianjin/ch001.txt",
+    "char_count": 2400,
+    "sha256": "sha256:41c9f0b7e2d5836a1f4c7e0b9d2a5638c1f4e7b0d3a6952c8f1b4e7d0a3c6925"
+  },
+  "global": {
+    "keep_threshold": 6.5,
+    "compress_threshold": 3.0,
+    "max_compression_ratio": 0.15,
+    "min_drop_rate": 0.3,
+    "episode_min_peak": 7.0,
+    "opening_conflict_types": [
+      "conflict_escalation",
+      "face_slap",
+      "reversal",
+      "identity_reveal",
+      "emotional_peak"
+    ],
+    "target_episode_duration_s": 90
+  },
+  "cast": [
+    {
+      "character_id": "lin_wan",
+      "display_name": "林晚",
+      "voice_id": "longxiaochun",
+      "role": "protagonist",
+      "aliases": [
+        "林家大小姐",
+        "那个废物"
+      ],
+      "appearance": "二十五岁女性，黑色长发松松挽起，旧灰呢大衣，眉眼清冷，唇色偏淡",
+      "reference_image_path": null
+    },
+    {
+      "character_id": "shen_ce",
+      "display_name": "沈策",
+      "voice_id": "longshu",
+      "role": "antagonist",
+      "aliases": [
+        "沈总"
+      ],
+      "appearance": "三十二岁男性，深藏青三件套西装，短发梳起，下颌线锋利，戴银色腕表",
+      "reference_image_path": null
+    }
+  ],
+  "beats": [
+    {
+      "beat_id": "b001",
+      "index": 0,
+      "source_span": {
+        "start_char": 0,
+        "end_char": 320,
+        "excerpt": "拍卖会门口，沈策伸手拦住了她……"
+      },
+      "summary": "林晚在拍卖会门口被沈策当众拦下，沈策用门槛羞辱她不配进场。",
+      "beat_type": "conflict_escalation",
+      "intensity": 7.0,
+      "decision": "keep",
+      "drop_reason": null,
+      "depends_on": [],
+      "script_char_count": 26,
+      "scene_id": "scene_auction_entrance",
+      "lines": [
+        {
+          "character_id": "shen_ce",
+          "text": "林晚，你也配站在这里？",
+          "delivery": "轻蔑，音量不高但压过全场",
+          "shot_size": "medium",
+          "line_type": "dialogue"
+        },
+        {
+          "character_id": "shen_ce",
+          "text": "这场拍卖会，最低门槛是一个亿。",
+          "delivery": "刻意放慢，说给围观的人听",
+          "shot_size": "close_up",
+          "line_type": "dialogue"
+        }
+      ],
+      "visual": {
+        "scene_id": "scene_auction_entrance",
+        "shot_size": "wide",
+        "prompt": "夜晚豪华拍卖行门口，宾客盛装，林晚穿旧外套逆着人流站定",
+        "action_duration_s": 3
+      },
+      "cliffhanger": null,
+      "notes": "开场即冲突，符合前十秒必须见矛盾的要求。"
+    },
+    {
+      "beat_id": "b002",
+      "index": 1,
+      "source_span": {
+        "start_char": 320,
+        "end_char": 760,
+        "excerpt": "水晶灯垂下万千光点，长廊两侧陈列着历年成交的珍品……"
+      },
+      "summary": "长篇描写会场的水晶灯、陈列品和宾客衣着。",
+      "beat_type": "filler",
+      "intensity": 1.2,
+      "decision": "drop",
+      "drop_reason": "scenery",
+      "depends_on": [],
+      "script_char_count": 0,
+      "notes": "环境信息由 b001 的空镜一并交代，不需要单独占时长。"
+    },
+    {
+      "beat_id": "b003",
+      "index": 2,
+      "source_span": {
+        "start_char": 760,
+        "end_char": 1180,
+        "excerpt": "三年前的那个雨夜，林家的大门在她身后关上……"
+      },
+      "summary": "回忆三年前林晚被逐出林家，被家族断定为一无是处的废物。",
+      "beat_type": "setup",
+      "intensity": 3.6,
+      "decision": "compress",
+      "drop_reason": null,
+      "depends_on": [],
+      "script_char_count": 21,
+      "scene_id": "scene_auction_entrance",
+      "lines": [
+        {
+          "character_id": "lin_wan",
+          "text": "三年前你把我赶出林家，说我这辈子都是废物。",
+          "delivery": "平静，没有起伏，反而更冷",
+          "shot_size": "close_up",
+          "line_type": "dialogue"
+        }
+      ],
+      "cliffhanger": null,
+      "notes": "原文四百余字的回忆压成一句当面对峙的台词。这段不能砍：b005 的打脸靠它才成立。"
+    },
+    {
+      "beat_id": "b004",
+      "index": 3,
+      "source_span": {
+        "start_char": 1180,
+        "end_char": 1600,
+        "excerpt": "拍卖师介绍了本场规则，前三件拍品依次落槌……"
+      },
+      "summary": "拍卖流程规则介绍，以及前三件拍品的成交过程。",
+      "beat_type": "filler",
+      "intensity": 2.0,
+      "decision": "drop",
+      "drop_reason": "pacing",
+      "depends_on": [],
+      "script_char_count": 0,
+      "notes": "与主线无关的流程铺陈，直接跳到压轴拍品。"
+    },
+    {
+      "beat_id": "b005",
+      "index": 4,
+      "source_span": {
+        "start_char": 1600,
+        "end_char": 2080,
+        "excerpt": "压轴的那幅画被推上台，落款处的三个字让全场安静下来……"
+      },
+      "summary": "压轴画作落款曝光，作者正是林晚；她同时是这场拍卖会最大的债主。",
+      "beat_type": "face_slap",
+      "intensity": 9.2,
+      "decision": "keep",
+      "drop_reason": null,
+      "depends_on": [
+        "b001",
+        "b003"
+      ],
+      "script_char_count": 37,
+      "scene_id": "scene_auction_hall",
+      "lines": [
+        {
+          "character_id": "lin_wan",
+          "text": "这幅画的落款，是我三年前写的。",
+          "delivery": "不看沈策，只看画",
+          "shot_size": "medium",
+          "line_type": "dialogue"
+        },
+        {
+          "character_id": "lin_wan",
+          "text": "沈总，您口中的废物，是这场拍卖会最大的债主。",
+          "delivery": "转身直视，一字一顿",
+          "shot_size": "close_up",
+          "line_type": "dialogue"
+        }
+      ],
+      "visual": {
+        "scene_id": "scene_auction_hall",
+        "shot_size": "insert",
+        "prompt": "画作右下角落款特写，缓慢推近，全场噪音骤停",
+        "action_duration_s": 3
+      },
+      "cliffhanger": null,
+      "notes": "本集情绪峰值。依赖 b001 的羞辱与 b003 的废物定性，两者缺一则打脸落空。"
+    },
+    {
+      "beat_id": "b006",
+      "index": 5,
+      "source_span": {
+        "start_char": 2080,
+        "end_char": 2400,
+        "excerpt": "她收回目光，忽然说起了三年前的那场火……"
+      },
+      "summary": "林晚抛出三年前那场火并非意外，全场哗然，本集结束。",
+      "beat_type": "hook",
+      "intensity": 8.0,
+      "decision": "keep",
+      "drop_reason": null,
+      "depends_on": [
+        "b005"
+      ],
+      "script_char_count": 12,
+      "scene_id": "scene_auction_hall",
+      "lines": [
+        {
+          "character_id": "lin_wan",
+          "text": "三年前那场火，不是意外。",
+          "delivery": "说完就走，不给任何人接话的机会",
+          "shot_size": "close_up",
+          "line_type": "dialogue"
+        }
+      ],
+      "cliffhanger": {
+        "tier": "tier_1",
+        "question": "那场火是谁放的，沈策是否知情？"
+      },
+      "notes": "全剧级钩子放在第一集集尾，观众必须追下一集才能拿到答案。"
+    }
+  ],
+  "episodes": [
+    {
+      "episode_id": "ep01",
+      "episode_no": 1,
+      "title": "第一集 · 落款",
+      "beat_ids": [
+        "b001",
+        "b003",
+        "b005",
+        "b006"
+      ],
+      "target_duration_s": 90
+    }
+  ],
+  "selection": {
+    "total_source_chars": 2400,
+    "total_script_chars": 96,
+    "compression_ratio": 0.04,
+    "drop_rate": 0.3333333333333333,
+    "kept": 3,
+    "compressed": 1,
+    "dropped": 2
+  },
+  "audit": [
+    {
+      "at": "2026-08-04T13:40:00+08:00",
+      "actor": "agent:claude",
+      "action": "segment",
+      "detail": "原文 2400 字切为 6 个候选段，span 首尾相接无重叠"
+    },
+    {
+      "at": "2026-08-04T13:52:00+08:00",
+      "actor": "selector:threshold",
+      "action": "select",
+      "detail": "按 keep>=6.5 / compress>=3.0 落定决策，丢弃 b002(scenery) 与 b004(pacing)，丢弃率 33.3%"
+    },
+    {
+      "at": "2026-08-04T14:05:00+08:00",
+      "actor": "human:tyler",
+      "action": "confirm",
+      "detail": "确认 b003 必须保留为压缩段而非丢弃，否则 b005 打脸失去前提"
+    }
+  ],
+  "repairs": [],
+  "quality": {
+    "repair_count": 0,
+    "by_severity": {
+      "low": 0,
+      "medium": 0,
+      "high": 0
+    },
+    "worst_severity": null,
+    "invented_lines": 0,
+    "truncated_lines": 0
+  }
+}
