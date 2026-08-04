@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 
 from src.luoxia.catalog_limits import find_shot_video_model, resolve_video_duration_bounds
 from src.luoxia.paths import TIMELINE_SCHEMA_PATH
+from src.luoxia.timeline.transitions import CUT, DISSOLVE, head_room_s, tail_room_s, transition_of
 
 EPS = 1e-6
 FROZEN_PHASES = frozenset({"frozen", "rendering", "rendered"})
@@ -188,6 +189,37 @@ def _check_invariants(
                 )
             )
 
+        # 16a. transition kind and duration agree (checkable without solved timing)
+        kind = str((shot.get("transition") or {}).get("kind") or CUT)
+        declared = float((shot.get("transition") or {}).get("duration_s") or 0.0)
+        if kind == CUT and declared > EPS:
+            issues.append(
+                ValidationIssue(
+                    code="cut_with_duration",
+                    message=f"transition.kind=cut must have duration_s 0, got {declared}",
+                    shot_id=sid,
+                    invariant=16,
+                )
+            )
+        if kind != CUT and declared <= EPS:
+            issues.append(
+                ValidationIssue(
+                    code="transition_without_duration",
+                    message=f"transition.kind={kind} requires duration_s > 0",
+                    shot_id=sid,
+                    invariant=16,
+                )
+            )
+        if kind == DISSOLVE and i == len(shots) - 1:
+            issues.append(
+                ValidationIssue(
+                    code="dissolve_on_last_shot",
+                    message="last shot has no successor to dissolve into; use fade_black or cut",
+                    shot_id=sid,
+                    invariant=16,
+                )
+            )
+
         # Everything below reads solved timing, which a draft does not have yet.
         if draft:
             continue
@@ -330,6 +362,55 @@ def _check_invariants(
                     )
                 )
 
+        # 16b. the transition must fit in breathing room so it never covers a spoken word
+        kind, duration = transition_of(shot)
+        if duration > EPS:
+            nxt = shots[i + 1] if i + 1 < len(shots) else None
+            if kind == DISSOLVE:
+                # The overlap sits after this shot's target window, so only the incoming
+                # shot's pre-speech room constrains it.
+                room = head_room_s(nxt) if nxt else 0.0
+                if duration > room + EPS:
+                    issues.append(
+                        ValidationIssue(
+                            code="transition_covers_speech",
+                            message=(
+                                f"dissolve {duration}s exceeds next shot's pre-speech room {room}s; "
+                                "raise lead_in_s or shorten the dissolve"
+                            ),
+                            shot_id=sid,
+                            invariant=16,
+                        )
+                    )
+            else:
+                room = tail_room_s(shot)
+                if duration > room + EPS:
+                    issues.append(
+                        ValidationIssue(
+                            code="transition_covers_speech",
+                            message=(
+                                f"{kind} {duration}s exceeds this shot's post-speech room {room}s; "
+                                "raise tail_out_s, shorten the fade, or insert a transition shot"
+                            ),
+                            shot_id=sid,
+                            invariant=16,
+                        )
+                    )
+                if nxt is not None:
+                    next_room = head_room_s(nxt)
+                    if duration > next_room + EPS:
+                        issues.append(
+                            ValidationIssue(
+                                code="transition_covers_speech",
+                                message=(
+                                    f"{kind} {duration}s exceeds next shot's pre-speech room "
+                                    f"{next_room}s; raise lead_in_s or shorten the fade"
+                                ),
+                                shot_id=sid,
+                                invariant=16,
+                            )
+                        )
+
     # 14. frozen phase requires hash + frozen_at
     phase = timeline.get("phase")
     if phase in FROZEN_PHASES:
@@ -416,6 +497,8 @@ def mutate_for_invariant_violation(
             if sub.get("start_s") is not None:
                 s["subtitle"]["end_s"] = s["timing"]["end_s"] + 1.0
                 break
+    elif invariant == 16:
+        shot["transition"] = {"kind": "fade_black", "duration_s": 1.5}
     else:
         raise ValueError(f"unknown invariant {invariant}")
     return tl

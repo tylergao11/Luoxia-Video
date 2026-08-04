@@ -17,7 +17,7 @@
 
 ## 1. 项目一句话
 
-把小说改编成竖屏漫剧短剧，agent 无人值守驱动，人类只在冻结点审片。基座是 fork 自 `alibaba/lumenx` 的 MIT 项目，基线锁死在 `7a1213a`。
+把小说改编成横屏漫剧短剧，agent 无人值守驱动，人类只在冻结点审片。基座是 fork 自 `alibaba/lumenx` 的 MIT 项目，基线锁死在 `7a1213a`。
 
 阶段一用 Grok（xAI）云 API 跑通，阶段二换本地 Wan 控成本。
 

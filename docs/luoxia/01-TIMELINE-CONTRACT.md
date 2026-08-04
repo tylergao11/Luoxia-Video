@@ -73,6 +73,7 @@ draft ──► audio_locked ──► frozen ──► rendering ──► rend
 13. `still.aspect_ratio == global.aspect_ratio`
 14. `phase >= frozen` 时，`timeline_hash` 与 `frozen_at` 非空
 15. 字幕区间必须包含在镜头区间内：`start_s <= subtitle.start_s` 且 `subtitle.end_s <= end_s`
+16. 转场必须落在无台词的留白区间内（详见第 10 节）：`kind == "cut"` 时 `duration_s == 0`，其余 `duration_s > 0`；`dissolve` 不得出现在末镜；`duration_s` 不得超过所占用的留白
 
 `phase == "draft"` 是例外。草稿由 `beats-bridge` 生成，此时还没跑 TTS，所有时长字段按设计就是空的——拿完整契约去校验它只会报一屏「缺少 start_s」。所以校验器对草稿走一档放宽档位：放开 `timing` 的必填约束，只跑第 4、9、10、12、13 条这些与时长无关的结构检查。拼错 `character_id`、画幅和 `global` 对不上，依然会在花掉第一分钱之前被拦下。
 
@@ -183,3 +184,75 @@ Grok 当前费率见 `02-PROVIDER-CONTRACT.md`。费率写在 provider 适配器
 `schema_version` 遵循语义化版本。新增可选字段升次版本；删改字段语义、调整不变量属破坏性变更，升主版本并在本文件追加迁移说明。
 
 改契约前先问一句：这个改动会不会让时长重新出现第二个来源？如果会，方案就是错的。
+
+### 1.0.0 → 1.1.0（新增可选字段，无需迁移）
+
+- 新增 `global.subtitle_style`：整集统一的字幕样式
+- 新增 `shots[].subtitle.position`：单镜字幕位置例外
+- 新增 `shots[].transition`：本镜切向下一镜的转场
+- 新增不变量 16
+
+三者全部可选，`1.0.0` 的文件继续通过校验：缺 `transition` 视为硬切，缺 `subtitle_style` 走内置默认值。
+
+## 10. 转场与字幕位置
+
+### 转场是剪辑决策，不是提示词
+
+**转场不写进视频生成的 prompt。** 两个原因，第二个是硬性的：
+
+1. i2v/t2v 模型对"叠化 / 闪白 / 划像"的服从度很低，写了也基本渲染不出来，且不可复现。
+2. 更要紧的是——模型若真在片头烧进 0.5 秒黑场，这 0.5 秒就成了**第二个时长来源**，而且是烧在像素里不可逆的那种。`target_duration_s` 与 `lead_in_s` 的推导会全部失准。
+
+所以转场由 `shots[].transition` 声明，合成阶段用 ffmpeg 执行：
+
+| kind | 用途 | 渲染方式 |
+|---|---|---|
+| `cut` | 硬切。短剧绝大多数镜头都该是这个 | 无操作 |
+| `fade_black` | 场景 / 时间跳转 | 前镜尾部 `fade=out`，后镜头部 `fade=in` |
+| `fade_white` | 回忆、冲击 | 同上，`color=white` |
+| `dissolve` | 同场景内的时间流逝 | `xfade`，重叠帧取自前镜被 trim 丢弃的余料 |
+
+需要 0.5 秒以上的黑场停顿时**不要用本字段**，插一个 `type == "transition"` 的独立镜头——它有自己的 `target_duration_s`，本来就在主时钟上占位。
+
+### 转场如何做到不动时长
+
+铁律不变：转场**只能花两种钱**，一种是呼吸留白，一种是本来就要丢掉的余料。
+
+```
+淡入淡出（fade_black / fade_white）
+  前镜：淡出占用 [target - d, target]，即 tail_out 留白  ⟹ d <= tail_out_s
+  后镜：淡入占用 [0, d]，即 lead_in 留白                ⟹ d <= lead_in_s
+  两镜各自长度不变，主时钟完全不动
+
+叠化（dissolve）
+  前镜片段延长 d 秒，多出来的画面取自 trim 丢弃的 slack 帧
+  （余料不够则 tpad 定格最后一帧，绝不缩短镜头）
+  xfade 的 offset = target_前，重叠区正好落在 [start_后, start_后 + d]
+  拼接后总长 = (target_前 + d) + target_后 - d = target_前 + target_后  ✓
+  重叠区在前镜 target 窗口之外，因此前镜台词不受影响，
+  只需保证 d <= 后镜的 lead_in_s
+```
+
+无台词的镜头（空镜、rhythm）整条都是留白，其 `head_room` / `tail_room` 等于 `target_duration_s`，可以承受完整的 1.5 秒转场。这也正是长转场该放在空镜上的原因。
+
+校验器按上述公式逐条检查（不变量 16），`transition_covers_speech` 就是"这个转场会盖住台词"。
+
+### 字幕位置是全局一致性问题
+
+`global.subtitle_style` 管整集，`shots[].subtitle.position` 只在本镜确有冲突时才填（画面下三分之一有关键信息，或画面里已经有文字）。**不要让 agent 逐镜决定字幕位置**——位置跳来跳去比位置不完美更难看。
+
+默认值针对**横屏 16:9**，且全部按画面比例推导，换分辨率不用重调：
+
+| 字段 | 留空时的取值 | 依据 |
+|---|---|---|
+| `font_size_px` | 画面高度 × 5% | 720p 约 36px，1080p 约 54px |
+| `margin_v_px` | 画面高度 × 6% | 横屏 title-safe 安全边距 |
+| `margin_h_px` | 画面宽度 × 8% | 左右留白，兼容裁切 |
+
+`outline_px` 默认 2，因为无描边字幕在亮背景上会直接消失。
+
+**这些值是成片画面的真实像素。** 实现上不能走 SRT——libass 渲染 SRT 用的是它自己的默认脚本坐标系（384×288），你写的"像素"会被当成那个坐标系里的单位再缩放到画面，位置和字号全部偏掉（第一版就踩了这个坑：本该在底部 6% 的字幕渲染到了画面正中）。所以合成阶段自己生成 `.ass`，在 `[Script Info]` 里把 `PlayResX/PlayResY` 声明成**实测的画面尺寸**（ffprobe 探测，不信任契约里写的 `resolution`，供应商可能返回别的尺寸），像素才真的是像素。
+
+超长台词由 `max_chars_per_line` / `max_lines_per_cue` 折行并**拆成多条字幕**，时间按字数比例分配。16 字/行、最多 2 行是中文字幕的通行上限。折行后还会按"画面可用宽度 ÷ 字号"再收紧一次，并设 `WrapStyle: 2` 关掉 libass 的自动折行——否则一行过宽会被它二次折行，实际行数冲破 `max_lines_per_cue`。
+
+`transition` 与 `subtitle_style` 都**不参与 `timeline_hash`**（`timing_fingerprint` 只取 `timing`）。这是有意的：它们是渲染层决策，不改变任何时长，冻结之后仍可调整而无需解冻重估成本。

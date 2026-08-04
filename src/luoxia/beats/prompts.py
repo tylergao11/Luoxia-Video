@@ -23,7 +23,30 @@ ANALYZE_SYSTEM = """你是短剧改编总监。原文已按段落编号给你，
 6. 开场：第一个 beat 必须是 conflict_escalation / face_slap / reversal / identity_reveal / emotional_peak。禁止用 setup 开场。
 7. 结尾：最后一个 beat 必须是 hook，并填 cliffhanger.tier 与 question。写不出那个具体问题，就说明它不是钩子。
 8. character_id 只用小写字母数字下划线；voice_id 从给定清单里选。
-9. 只输出一个 JSON 对象，不要解释文字。
+9. 镜头调度：每个 beat 必须给一个镜头序列（visuals + lines 交织），规则见下方「镜头调度」一节。
+10. 只输出一个 JSON 对象，不要解释文字。
+
+镜头调度（这一节决定成片像剧还是像轮流说话，务必照做）：
+
+一个 beat 不是「一张画面 + 几句台词」，而是一串镜头。每个无台词镜头写进 visuals，用 after_line 说明它插在第几句台词之后（0=排在所有台词之前，1=第一句台词之后）。四种无台词镜头：
+
+  establishing 建立镜头/空镜 —— 交代地点和正在发生的事。「远处一条龙压着云层飞来」。2-4 秒。
+  reaction     反应镜头 —— 切到某人脸上，只看表情，没有台词。必须用 subject 指明是谁的脸。1-1.5 秒。
+  insert       插入镜头 —— 关键细节特写。「攥到发白的指节」「地上碎成两半的玉牌」。1-2 秒。
+  action       动作镜头 —— 人物做了什么。「他一脚踹翻案几」。2-3 秒。
+
+常用切法（照着套，别每个 beat 都用同一种）：
+  亮相/异变：establishing → reaction(在场者的脸) → 台词
+  当众打脸：台词(挑衅) → reaction(被打脸者的脸) → insert(攥紧的手) → 台词(反击)
+  身份揭穿：insert(关键物件) → reaction(震惊的脸) → 台词
+  情绪爆发：台词 → reaction → action(动作发泄)
+
+镜头数按强度分配，不要一律给足（每多一个镜头就多花一次出图和一次视频生成的钱）：
+  intensity >= 7  ：总镜头数最多 6（台词镜头 + visuals 一起算）
+  intensity >= 3  ：最多 3
+  其余 / filler   ：最多 1，或干脆不给 visuals
+
+反应镜头是爽点的落点，宁可砍插入镜头也不要砍反应镜头。
 
 强度锚点（务必按此尺度，不要整体虚高）：
   0-2  没有冲突也没有新信息（环境、流程、寒暄）
@@ -79,12 +102,24 @@ ANALYZE_USER_TEMPLATE = """作品 work_id={work_id}
           "line_type": "dialogue"
         }}
       ],
-      "visual": {{
-        "scene_id": "scene_auction",
-        "shot_size": "wide",
-        "prompt": "中文画面描述，具体、可画",
-        "action_duration_s": 3
-      }},
+      "visuals": [
+        {{
+          "kind": "establishing",
+          "after_line": 0,
+          "scene_id": "scene_auction",
+          "shot_size": "wide",
+          "prompt": "中文画面描述，具体、可画",
+          "action_duration_s": 3
+        }},
+        {{
+          "kind": "reaction",
+          "after_line": 1,
+          "subject": "lin_wan",
+          "shot_size": "close_up",
+          "prompt": "林晚被当众点名，指尖一顿，眼神冷下来",
+          "action_duration_s": 1.5
+        }}
+      ],
       "cliffhanger": null
     }}
   ]
@@ -95,7 +130,10 @@ ANALYZE_USER_TEMPLATE = """作品 work_id={work_id}
 - beat_id 用 b001, b002… 连续编号。
 - intensity>=6.5 的段必须写 lines，否则该段会被程序补一句机械台词，质量很差。
 - cast 里每个角色都要写 appearance，它会被用来生成定妆图，决定全片是否换脸。
-- 不要输出 decision、start_char、end_char 字段。
+- visuals 里的 after_line 必须逐个不减（0,0,1,1,2…），这就是镜头的播放顺序。
+- reaction 镜头的 subject 必填，且必须是 cast 里的 character_id。
+- 超出镜头预算的部分会被程序按「先砍插入、后砍反应」裁掉并记账，自己控制好数量。
+- 不要输出 decision、start_char、end_char 字段，也不要用旧的单数 visual 字段。
 """
 
 ANALYZE_CARRYOVER_TEMPLATE = """
@@ -115,8 +153,8 @@ REWRITE_USER_TEMPLATE = """目标口语时长约 {budget_s:.1f} 秒（约 {budge
 {text}
 """
 
-STILL_PROMPT_SYSTEM = """你是竖屏短剧美术指导。把镜头意图改写成一张静帧的中文生图提示词。
-要求：写清人物外貌与服装、景别、光线、构图；9:16 竖屏；不要字幕文字；不要镜头运动词。
+STILL_PROMPT_SYSTEM = """你是横屏短剧美术指导。把镜头意图改写成一张静帧的中文生图提示词。
+要求：写清人物外貌与服装、景别、光线、构图；16:9 横屏，横向构图留出左右空间；不要字幕文字；不要镜头运动词。
 只输出一个 JSON：{{"prompt":"...", "negative_prompt":"..."}}"""
 
 STILL_PROMPT_USER = """角色设定：

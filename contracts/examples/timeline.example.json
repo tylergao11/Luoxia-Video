@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "project_id": "luoxia_demo",
   "episode_id": "ep01",
   "title": "第一集 · 重逢",
@@ -8,13 +8,24 @@
   "timeline_hash": "sha256:0f2b8c1d9a4e7f36b5c2d8e1a9047f3c6b1d5e8a2f4c7091d3b6e9a2c5f8014b",
   "global": {
     "fps": 25,
-    "aspect_ratio": "9:16",
+    "aspect_ratio": "16:9",
     "resolution": "720p",
     "lead_in_s": 0.3,
     "tail_out_s": 0.5,
     "min_speed_ratio": 0.92,
     "max_speed_ratio": 1.1,
-    "default_action_duration_s": 4
+    "default_action_duration_s": 4,
+    "subtitle_style": {
+      "font_name": "Source Han Sans SC",
+      "font_size_px": null,
+      "bold": true,
+      "outline_px": 2,
+      "position": "bottom",
+      "margin_v_px": null,
+      "margin_h_px": null,
+      "max_chars_per_line": 16,
+      "max_lines_per_cue": 2
+    }
   },
   "cast": [
     {
@@ -57,7 +68,7 @@
         "status": "ready",
         "asset_id": "asset_still_ep01_s001",
         "local_path": "output/ep01/stills/ep01_s001.png",
-        "aspect_ratio": "9:16",
+        "aspect_ratio": "16:9",
         "prompt": "雨夜old街巷空镜，霓虹倒影在积水上，无人",
         "attempts": 1
       },
@@ -76,7 +87,12 @@
         "cost_usd": null
       },
       "lipsync": { "required": false, "reason": null, "model": null, "status": "skipped" },
-      "subtitle": { "text": null, "start_s": null, "end_s": null, "description": "空镜无字幕" }
+      "subtitle": { "text": null, "start_s": null, "end_s": null, "description": "空镜无字幕" },
+      "transition": {
+        "kind": "dissolve",
+        "duration_s": 0.3,
+        "note": "空镜叠化进特写，重叠区落在 s002 的 0.3s lead_in 留白内，不碰台词"
+      }
     },
     {
       "shot_id": "ep01_s002",
@@ -119,7 +135,7 @@
         "status": "ready",
         "asset_id": "asset_still_ep01_s002",
         "local_path": "output/ep01/stills/ep01_s002.png",
-        "aspect_ratio": "9:16",
+        "aspect_ratio": "16:9",
         "prompt": "林晚特写，雨水沾湿额发，瞳孔微缩",
         "attempts": 2
       },
@@ -143,7 +159,8 @@
         "model": null,
         "status": "skipped"
       },
-      "subtitle": { "text": "你怎么在这？", "start_s": 4.3, "end_s": 5.72, "description": null }
+      "subtitle": { "text": "你怎么在这？", "start_s": 4.3, "end_s": 5.72, "description": null },
+      "transition": { "kind": "cut", "duration_s": 0.0, "note": "对话正反打，硬切" }
     },
     {
       "shot_id": "ep01_s003",
@@ -186,7 +203,7 @@
         "status": "ready",
         "asset_id": "asset_still_ep01_s003",
         "local_path": "output/ep01/stills/ep01_s003.png",
-        "aspect_ratio": "9:16",
+        "aspect_ratio": "16:9",
         "prompt": "沈策中景，背对霓虹，雨伞垂在身侧",
         "attempts": 1
       },
@@ -214,7 +231,12 @@
         "text": "我等了三年。每一天都在想，如果那天我没有走，现在会不会不一样。",
         "start_s": 6.52,
         "end_s": 15.12,
-        "description": null
+        "description": "31 字超出单条上限，合成时按标点折行并拆成多条，时间按字数比例分配"
+      },
+      "transition": {
+        "kind": "fade_black",
+        "duration_s": 0.3,
+        "note": "情绪断点，短黑场。受 s004 的 lead_in 0.3 限制，不能再长"
       }
     },
     {
@@ -259,7 +281,7 @@
         "status": "ready",
         "asset_id": "asset_still_ep01_s004",
         "local_path": "output/ep01/stills/ep01_s004.png",
-        "aspect_ratio": "9:16",
+        "aspect_ratio": "16:9",
         "prompt": "林晚特写，眼眶泛红，雨水与泪水混在一起",
         "attempts": 7
       },
@@ -296,6 +318,11 @@
         "start_s": 15.92,
         "end_s": 20.12,
         "description": "这条镜头画面已钉死（抽卡 7 次才达标），台词被改写并提速至 1.08 以适配 5 秒画面"
+      },
+      "transition": {
+        "kind": "fade_black",
+        "duration_s": 0.5,
+        "note": "集尾淡出。末镜无后继，只做淡出，占用自身 0.5s tail_out"
       }
     }
   ],

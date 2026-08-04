@@ -23,7 +23,7 @@ def test_example_passes(example):
     assert issues == []
 
 
-@pytest.mark.parametrize("invariant", list(range(1, 16)))
+@pytest.mark.parametrize("invariant", list(range(1, 17)))
 def test_each_invariant_fails(example, invariant):
     bad = mutate_for_invariant_violation(example, invariant)
     with pytest.raises(TimelineValidationError) as exc:

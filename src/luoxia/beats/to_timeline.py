@@ -7,7 +7,7 @@ from src.luoxia.beats.validator import RETAINED
 
 DEFAULT_GLOBAL: Dict[str, Any] = {
     "fps": 25,
-    "aspect_ratio": "9:16",
+    "aspect_ratio": "16:9",
     "resolution": "720p",
     "lead_in_s": 0.3,
     "tail_out_s": 0.5,
@@ -54,7 +54,6 @@ def build_timeline_draft(
         if beat.get("decision") not in RETAINED:
             raise BridgeError(f"beat '{beat_id}' was dropped but is scheduled in {episode_id}")
 
-        visual = beat.get("visual") or None
         lines = beat.get("lines") or []
         # The action shot shows whoever speaks in this beat, so it gets their portraits too.
         beat_characters = []
@@ -62,11 +61,25 @@ def build_timeline_draft(
             cid = line.get("character_id")
             if cid and cid not in beat_characters:
                 beat_characters.append(cid)
-        if visual:
+
+        visuals = _coverage(beat)
+        by_slot: Dict[int, List[Dict[str, Any]]] = {}
+        for visual in visuals:
+            slot = int(visual.get("after_line") or 0)
+            if slot > len(lines):
+                raise BridgeError(
+                    f"beat '{beat_id}': visual after_line={slot} but the beat has {len(lines)} line(s)"
+                )
+            by_slot.setdefault(slot, []).append(visual)
+
+        # Emit the beat's coverage in reading order: shots before line 1, line 1, shots
+        # after line 1, and so on. This is the whole point of after_line.
+        for v_index, visual in enumerate(by_slot.get(0) or [], start=1):
             shots.append(
                 _visual_shot(
                     episode_id, beat, visual, g, provider, model,
-                    has_lines=bool(lines), characters=beat_characters,
+                    slot=0, ordinal=v_index,
+                    cast_by_id=cast_by_id, characters=beat_characters,
                 )
             )
         for n, line in enumerate(lines, start=1):
@@ -75,6 +88,22 @@ def build_timeline_draft(
                 raise BridgeError(f"beat '{beat_id}' line {n}: character '{cid}' not in cast")
             used_characters.add(cid)
             shots.append(_dialogue_shot(episode_id, beat, line, n, cast_by_id[cid], g, provider, model))
+            for v_index, visual in enumerate(by_slot.get(n) or [], start=1):
+                shots.append(
+                    _visual_shot(
+                        episode_id, beat, visual, g, provider, model,
+                        slot=n, ordinal=v_index,
+                        cast_by_id=cast_by_id, characters=beat_characters,
+                    )
+                )
+        for visual in visuals:
+            subject = visual.get("subject")
+            if subject:
+                if subject not in cast_by_id:
+                    raise BridgeError(
+                        f"beat '{beat_id}': visual subject '{subject}' not in cast"
+                    )
+                used_characters.add(subject)
 
     if not shots:
         raise BridgeError(f"episode {episode_id} produced no shots")
@@ -83,7 +112,7 @@ def build_timeline_draft(
         shot["index"] = i
 
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "project_id": beats_doc.get("work_id"),
         "episode_id": episode_id,
         "title": episode.get("title") or beats_doc.get("title"),
@@ -127,6 +156,30 @@ def _timeline_cast_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _coverage(beat: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Ordered silent shots for a beat, accepting the deprecated single `visual`."""
+    visuals = beat.get("visuals")
+    if visuals:
+        return list(visuals)
+    legacy = beat.get("visual")
+    return [{**legacy, "kind": "establishing", "after_line": 0}] if legacy else []
+
+
+# A silent shot's beats-side kind maps onto the timeline shot type that a reviewer reads.
+_KIND_TO_TYPE = {
+    "establishing": "transition",
+    "reaction": "reaction",
+    "insert": "insert",
+    "action": "action",
+}
+
+# Reaction and insert shots are punctuation: at 4s they stop reading as cuts and start
+# reading as dead air, so they get their own default instead of default_action_duration_s.
+_KIND_DEFAULT_DURATION_S = {"reaction": 1.5, "insert": 1.5}
+
+_KIND_DEFAULT_SHOT_SIZE = {"reaction": "close_up", "insert": "insert"}
+
+
 def _visual_shot(
     episode_id: str,
     beat: Dict[str, Any],
@@ -135,19 +188,30 @@ def _visual_shot(
     provider: str,
     model: str,
     *,
-    has_lines: bool,
+    slot: int,
+    ordinal: int,
+    cast_by_id: Dict[str, Any],
     characters: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
+    kind = str(visual.get("kind") or "establishing")
+    subject = visual.get("subject")
+    # A reaction shot exists to show one face; anyone else in frame defeats it.
+    shot_characters = [subject] if subject else list(characters or [])
+    duration = (
+        visual.get("action_duration_s")
+        or _KIND_DEFAULT_DURATION_S.get(kind)
+        or g["default_action_duration_s"]
+    )
     return {
-        "shot_id": f"{episode_id}_{beat['beat_id']}_v",
+        "shot_id": f"{episode_id}_{beat['beat_id']}_v{slot}{ordinal}",
         "index": 0,
-        "type": "action" if has_lines else "transition",
+        "type": _KIND_TO_TYPE.get(kind, "action"),
         "timing_driver": "rhythm",
         "scene_id": visual.get("scene_id") or beat.get("scene_id"),
-        "shot_size": visual.get("shot_size"),
-        "characters": list(characters or []),
+        "shot_size": visual.get("shot_size") or _KIND_DEFAULT_SHOT_SIZE.get(kind),
+        "characters": shot_characters,
         "timing": {
-            "target_duration_s": float(visual.get("action_duration_s") or g["default_action_duration_s"]),
+            "target_duration_s": float(duration),
             "trim": {"strategy": "tail", "head_s": 0.0, "tail_s": 0.0},
         },
         "still": {
@@ -165,8 +229,36 @@ def _visual_shot(
             "attempts": 0,
         },
         "lipsync": {"required": False, "status": "skipped"},
-        "subtitle": {"text": None, "description": beat.get("summary")},
+        "subtitle": {
+            "text": None,
+            "description": _visual_description(kind, subject, beat, cast_by_id),
+        },
+        "transition": {"kind": "cut", "duration_s": 0.0, "note": None},
     }
+
+
+_KIND_LABEL = {
+    "establishing": "建立镜头",
+    "reaction": "反应镜头",
+    "insert": "插入镜头",
+    "action": "动作镜头",
+}
+
+
+def _visual_description(
+    kind: str,
+    subject: Optional[str],
+    beat: Dict[str, Any],
+    cast_by_id: Dict[str, Any],
+) -> str:
+    """Context for the still-prompt writer. A reaction shot must not describe the whole
+    beat, or the image comes back as a wide two-shot instead of one face."""
+    label = _KIND_LABEL.get(kind, kind)
+    summary = beat.get("summary") or ""
+    if kind == "reaction" and subject:
+        name = (cast_by_id.get(subject) or {}).get("display_name") or subject
+        return f"{label}：{name}的表情反应（{summary}）"
+    return f"{label}：{summary}" if summary else label
 
 
 def _dialogue_shot(
@@ -215,4 +307,5 @@ def _dialogue_shot(
         },
         "lipsync": {"required": False, "status": "skipped"},
         "subtitle": {"text": line["text"]},
+        "transition": {"kind": "cut", "duration_s": 0.0, "note": None},
     }

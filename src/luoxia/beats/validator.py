@@ -16,6 +16,12 @@ RATIO_EPS = 1e-6
 SCORED_PHASES = frozenset({"scored", "selected", "delivered"})
 SELECTED_PHASES = frozenset({"selected", "delivered"})
 RETAINED = frozenset({"keep", "compress"})
+DEFAULT_COVERAGE = {
+    "peak_threshold": 7.0,
+    "peak_max_shots": 6,
+    "mid_max_shots": 3,
+    "low_max_shots": 1,
+}
 DEFAULT_OPENING_TYPES = (
     "conflict_escalation",
     "face_slap",
@@ -52,6 +58,36 @@ def load_schema(schema_path: Optional[Path] = None) -> Dict[str, Any]:
 
 def script_char_count(beat: Dict[str, Any]) -> int:
     return sum(len((ln.get("text") or "")) for ln in (beat.get("lines") or []))
+
+
+def coverage_visuals(beat: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Ordered silent shots of a beat, accepting the deprecated single `visual`."""
+    visuals = beat.get("visuals")
+    if visuals:
+        return list(visuals)
+    legacy = beat.get("visual")
+    return [{**legacy, "kind": "establishing", "after_line": 0}] if legacy else []
+
+
+def shot_count(beat: Dict[str, Any]) -> int:
+    """Shots this beat will cost to film: one per line plus one per silent shot."""
+    return len(beat.get("lines") or []) + len(coverage_visuals(beat))
+
+
+def coverage_settings(beats_doc: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(DEFAULT_COVERAGE)
+    merged.update((beats_doc.get("global") or {}).get("coverage") or {})
+    return merged
+
+
+def coverage_budget(beat: Dict[str, Any], coverage: Dict[str, Any], g: Dict[str, Any]) -> int:
+    """Shot allowance for this beat. Money follows intensity: peaks get real coverage."""
+    intensity = float(beat.get("intensity") or 0)
+    if intensity >= float(coverage["peak_threshold"]):
+        return int(coverage["peak_max_shots"])
+    if intensity >= float(g.get("compress_threshold", 3.0)):
+        return int(coverage["mid_max_shots"])
+    return int(coverage["low_max_shots"])
 
 
 def compute_selection_stats(beats_doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -124,6 +160,7 @@ def _check_invariants(beats_doc: Dict[str, Any]) -> List[BeatsIssue]:
     by_id = {b.get("beat_id"): b for b in beats}
 
     _check_per_beat(issues, beats, source_chars, cast_ids, scored=scored, selected=selected)
+    _check_coverage(issues, beats, cast_ids, coverage_settings(beats_doc), g, selected=selected)
     if selected:
         _check_dependencies(issues, beats, by_id)
         _check_episodes(issues, beats_doc, beats, by_id, g)
@@ -231,7 +268,7 @@ def _check_per_beat(
             )
 
         # 7. retained beats must deliver something
-        if decision in RETAINED and not (beat.get("lines") or beat.get("visual")):
+        if decision in RETAINED and not (beat.get("lines") or coverage_visuals(beat)):
             issues.append(
                 BeatsIssue(
                     code="empty_retained_beat",
@@ -294,6 +331,97 @@ def _check_per_beat(
                         message=f"line character_id '{cid}' not in cast",
                         beat_id=bid,
                         invariant=17,
+                    )
+                )
+
+
+def _check_coverage(
+    issues: List[BeatsIssue],
+    beats: List[Dict[str, Any]],
+    cast_ids,
+    coverage: Dict[str, Any],
+    g: Dict[str, Any],
+    *,
+    selected: bool,
+) -> None:
+    """21. the shot list must be readable as a shot list, and must fit the budget."""
+    for beat in beats:
+        bid = beat.get("beat_id")
+
+        if beat.get("visuals") and beat.get("visual"):
+            issues.append(
+                BeatsIssue(
+                    code="visual_and_visuals",
+                    message="fill either visuals (ordered coverage) or the deprecated visual, not both",
+                    beat_id=bid,
+                    invariant=21,
+                )
+            )
+
+        visuals = beat.get("visuals") or []
+        line_count = len(beat.get("lines") or [])
+        previous_slot = 0
+        for n, visual in enumerate(visuals, start=1):
+            slot = int(visual.get("after_line") or 0)
+            if slot > line_count:
+                issues.append(
+                    BeatsIssue(
+                        code="after_line_out_of_range",
+                        message=f"visuals[{n - 1}].after_line {slot} exceeds line count {line_count}",
+                        beat_id=bid,
+                        invariant=21,
+                    )
+                )
+            if slot < previous_slot:
+                issues.append(
+                    BeatsIssue(
+                        code="coverage_out_of_order",
+                        message=(
+                            f"visuals[{n - 1}].after_line {slot} goes back before "
+                            f"{previous_slot}; coverage must read in shot order"
+                        ),
+                        beat_id=bid,
+                        invariant=21,
+                    )
+                )
+            previous_slot = max(previous_slot, slot)
+
+            subject = visual.get("subject")
+            if visual.get("kind") == "reaction" and not subject:
+                issues.append(
+                    BeatsIssue(
+                        code="reaction_without_subject",
+                        message=f"visuals[{n - 1}] is a reaction shot with no subject; whose face is it?",
+                        beat_id=bid,
+                        invariant=21,
+                    )
+                )
+            if subject and subject not in cast_ids:
+                issues.append(
+                    BeatsIssue(
+                        code="unknown_character",
+                        message=f"visuals[{n - 1}].subject '{subject}' not in cast",
+                        beat_id=bid,
+                        invariant=21,
+                    )
+                )
+
+        # Budget is only meaningful once decisions exist; a draft may still be oversized.
+        if selected and beat.get("decision") in RETAINED:
+            # The budget governs the silent shots we add, not the lines content selection
+            # already approved, so a line-heavy beat never trips this check.
+            allowance = max(coverage_budget(beat, coverage, g), len(beat.get("lines") or []))
+            actual = shot_count(beat)
+            if actual > allowance:
+                issues.append(
+                    BeatsIssue(
+                        code="coverage_over_budget",
+                        message=(
+                            f"{actual} shots exceeds the {allowance}-shot budget for "
+                            f"intensity {beat.get('intensity')}"
+                        ),
+                        beat_id=bid,
+                        invariant=21,
                     )
                 )
 
@@ -589,6 +717,7 @@ def mutate_for_invariant_violation(beats_doc: Dict[str, Any], invariant: int) ->
         target = _first_retained(beats)
         target["lines"] = []
         target.pop("visual", None)
+        target.pop("visuals", None)
         target["script_char_count"] = 0
     elif invariant == 8:
         _first_dropped(beats)["drop_reason"] = None
@@ -624,6 +753,12 @@ def mutate_for_invariant_violation(beats_doc: Dict[str, Any], invariant: int) ->
         ids = list(doc["episodes"][0]["beat_ids"])
         ids.remove(payoff["beat_id"])
         doc["episodes"][0]["beat_ids"] = [payoff["beat_id"]] + ids
+    elif invariant == 21:
+        target = _first_retained(beats)
+        target["visuals"] = [
+            {"kind": "reaction", "after_line": len(target["lines"]), "subject": None},
+            {"kind": "insert", "after_line": 0},
+        ]
     else:
         raise ValueError(f"unknown invariant {invariant}")
     return doc

@@ -9,8 +9,8 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "1.0.0",
-      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/01-TIMELINE-CONTRACT.md 记录迁移方式。"
+      "enum": ["1.0.0", "1.1.0"],
+      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/01-TIMELINE-CONTRACT.md 记录迁移方式。1.1.0 新增可选的 global.subtitle_style 与 shots[].transition，1.0.0 文件继续有效。"
     },
     "project_id": { "type": "string", "minLength": 1 },
     "episode_id": {
@@ -37,8 +37,8 @@
         "fps": { "type": "integer", "minimum": 1, "maximum": 60, "default": 25 },
         "aspect_ratio": {
           "type": "string",
-          "enum": ["9:16", "16:9", "1:1", "4:3", "3:4", "3:2", "2:3"],
-          "default": "9:16"
+          "enum": ["16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3"],
+          "default": "16:9"
         },
         "resolution": { "type": "string", "enum": ["480p", "720p", "1080p"], "default": "720p" },
         "lead_in_s": {
@@ -57,7 +57,8 @@
         "default_action_duration_s": {
           "type": "number", "minimum": 1, "maximum": 15, "default": 4,
           "description": "无台词镜头的默认时长。这类镜头由剪辑节奏驱动，不由音频推导。"
-        }
+        },
+        "subtitle_style": { "$ref": "#/$defs/subtitle_style" }
       }
     },
     "cast": {
@@ -120,8 +121,8 @@
         "index": { "type": "integer", "minimum": 0 },
         "type": {
           "type": "string",
-          "enum": ["dialogue", "narration", "action", "transition"],
-          "description": "dialogue/narration 由音频驱动；action/transition 由节奏驱动。"
+          "enum": ["dialogue", "narration", "action", "reaction", "insert", "transition"],
+          "description": "dialogue/narration 由音频驱动；action/reaction/insert/transition 由节奏驱动。reaction=切到某人脸上的无台词反应，insert=关键细节特写，transition=空镜/建立镜头。区分它们是为了让人工审片时一眼看出镜头调度，也让转场规则有依据（正反打必须硬切）。"
         },
         "timing_driver": {
           "type": "string",
@@ -141,7 +142,8 @@
         "still": { "$ref": "#/$defs/still" },
         "video": { "$ref": "#/$defs/video" },
         "lipsync": { "$ref": "#/$defs/lipsync" },
-        "subtitle": { "$ref": "#/$defs/subtitle" }
+        "subtitle": { "$ref": "#/$defs/subtitle" },
+        "transition": { "$ref": "#/$defs/transition" }
       },
       "allOf": [
         {
@@ -309,7 +311,68 @@
         "text": { "type": ["string", "null"] },
         "start_s": { "type": ["number", "null"], "minimum": 0 },
         "end_s": { "type": ["number", "null"], "minimum": 0 },
-        "description": { "type": ["string", "null"] }
+        "description": { "type": ["string", "null"] },
+        "position": {
+          "type": ["string", "null"],
+          "enum": ["bottom", "middle", "top", null],
+          "description": "仅在本镜需要偏离全局位置时填写（画面下三分之一有关键信息或已有画面内文字）。null=继承 global.subtitle_style.position。字幕位置是全局一致性问题，不要逐镜换位置。"
+        }
+      }
+    },
+    "subtitle_style": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "整集统一的字幕渲染样式，合成时翻译成 libass force_style。属于渲染层决策，不参与 timeline_hash，冻结后仍可调整。",
+      "properties": {
+        "font_name": { "type": "string", "default": "Source Han Sans SC" },
+        "font_size_px": {
+          "type": ["number", "null"], "minimum": 8, "maximum": 200,
+          "description": "字号，单位是成片画面的真实像素（合成时写进 ASS 的 PlayRes 与画面等大）。null=按画面高度的 5% 计算，换分辨率不用重调。"
+        },
+        "bold": { "type": "boolean", "default": true },
+        "primary_color_hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "default": "#FFFFFF" },
+        "outline_color_hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "default": "#000000" },
+        "outline_px": {
+          "type": "number", "minimum": 0, "maximum": 8, "default": 2,
+          "description": "描边宽度。实拍/漫剧背景复杂，没有描边的字幕在亮背景上会直接消失。"
+        },
+        "shadow_px": { "type": "number", "minimum": 0, "maximum": 8, "default": 0 },
+        "position": {
+          "type": "string",
+          "enum": ["bottom", "middle", "top"],
+          "default": "bottom"
+        },
+        "margin_v_px": {
+          "type": ["number", "null"], "minimum": 0, "maximum": 800,
+          "description": "字幕到所在边的距离，真实像素。null=按画面高度的 6% 计算，即横屏的 title-safe 安全边距。"
+        },
+        "margin_h_px": {
+          "type": ["number", "null"], "minimum": 0, "maximum": 800,
+          "description": "左右边距，真实像素。null=按画面宽度的 8% 计算。"
+        },
+        "max_chars_per_line": {
+          "type": "integer", "minimum": 8, "maximum": 40, "default": 16,
+          "description": "超长台词按此宽度折行并拆成多条字幕，按字数比例分配时间。16 字/行、最多 2 行是中文字幕的通行上限。合成时还会按画面宽度与字号收紧，避免 libass 二次折行冲破行数上限。"
+        },
+        "max_lines_per_cue": { "type": "integer", "minimum": 1, "maximum": 3, "default": 2 }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "本镜头切向下一镜头的转场。由合成阶段执行，不是给视频模型的提示词——写进 prompt 的转场既不可控，还会把时长烧进像素里破坏音频优先的记账。转场只消耗呼吸留白与 trim 丢弃的余料，绝不改变 target_duration_s / start_s / end_s。",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["cut", "fade_black", "fade_white", "dissolve"],
+          "default": "cut",
+          "description": "cut=硬切（默认，短剧绝大多数镜头都该是硬切）；fade_black=前镜淡出黑场+后镜从黑淡入，用于场景/时间跳转；fade_white=闪白，用于回忆或冲击；dissolve=叠化，用于同场景内的时间流逝。需要 0.5s 以上的黑场停顿时，不要用本字段，改插一个 type=transition 的独立镜头。"
+        },
+        "duration_s": {
+          "type": "number", "minimum": 0, "maximum": 1.5, "default": 0,
+          "description": "转场时长。kind=cut 必须为 0；其余必须 > 0。校验器保证它落在无台词的留白区间内，不会盖住任何一个字。"
+        },
+        "note": { "type": ["string", "null"], "description": "agent 选择该转场的理由，用于人工审片时判断是否同意。" }
       }
     }
   }

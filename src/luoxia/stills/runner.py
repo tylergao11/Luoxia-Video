@@ -24,7 +24,7 @@ def render_timeline_stills(
     """
     root = Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
-    aspect = (timeline.get("global") or {}).get("aspect_ratio") or "9:16"
+    aspect = (timeline.get("global") or {}).get("aspect_ratio") or "16:9"
     size = size_for_aspect(aspect)
     gen = generate or _default_generate()
     refs = reference_map(timeline)

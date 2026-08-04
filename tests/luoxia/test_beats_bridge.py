@@ -30,18 +30,22 @@ def test_draft_shape(beats):
     assert [c["character_id"] for c in draft["cast"]] == ["lin_wan", "shen_ce"]
 
     ids = [s["shot_id"] for s in draft["shots"]]
-    # b001 and b005 carry a visual, so each contributes one rhythm shot before its lines.
+    # b001 and b005 carry coverage; the _v<slot><ordinal> suffix says where it was inserted.
     assert ids == [
-        "ep01_b001_v",
+        "ep01_b001_v01",
         "ep01_b001_l01",
+        "ep01_b001_v11",
         "ep01_b001_l02",
+        "ep01_b001_v21",
         "ep01_b003_l01",
-        "ep01_b005_v",
+        "ep01_b005_v01",
         "ep01_b005_l01",
+        "ep01_b005_v11",
         "ep01_b005_l02",
+        "ep01_b005_v21",
         "ep01_b006_l01",
     ]
-    assert [s["index"] for s in draft["shots"]] == list(range(8))
+    assert [s["index"] for s in draft["shots"]] == list(range(12))
 
     visual = draft["shots"][0]
     assert visual["timing_driver"] == "rhythm"
@@ -52,7 +56,7 @@ def test_draft_shape(beats):
     assert line["dialogue"]["text"] == "林晚，你也配站在这里？"
     assert line["dialogue"]["emotion"] == "轻蔑，音量不高但压过全场"
     assert line["audio"]["voice_id"] == "longshu"
-    assert line["still"]["aspect_ratio"] == "9:16"
+    assert line["still"]["aspect_ratio"] == "16:9"
 
 
 def test_draft_carries_no_durations_of_its_own(beats):
@@ -72,7 +76,7 @@ def test_draft_validates_under_the_draft_profile(beats):
 
     # Structural mistakes are still caught before a single image is generated.
     draft["shots"][1]["dialogue"]["character_id"] = "ghost"
-    draft["shots"][2]["still"]["aspect_ratio"] = "16:9"
+    draft["shots"][2]["still"]["aspect_ratio"] = "9:16"
     issues = validate_timeline(draft, raise_on_error=False)
     assert {i.invariant for i in issues} == {12, 13}
 

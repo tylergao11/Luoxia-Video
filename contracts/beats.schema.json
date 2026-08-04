@@ -9,8 +9,8 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "1.0.0",
-      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/04-BEATS-CONTRACT.md 记录迁移方式。"
+      "enum": ["1.0.0", "1.1.0"],
+      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/04-BEATS-CONTRACT.md 记录迁移方式。1.1.0 新增可选的 global.coverage 与 beats[].visuals（镜头调度），1.0.0 文件继续有效。"
     },
     "work_id": {
       "type": "string",
@@ -81,7 +81,8 @@
         "target_episode_duration_s": {
           "type": "number", "minimum": 15, "maximum": 600, "default": 90,
           "description": "单集目标时长，供 timeline 桥接时做长度预警。真实时长仍以 TTS 实测为准。"
-        }
+        },
+        "coverage": { "$ref": "#/$defs/coverage" }
       }
     },
     "cast": {
@@ -283,7 +284,7 @@
         },
         "visual": {
           "type": ["object", "null"],
-          "description": "无台词画面。存在时桥接为一个 rhythm 镜头，插在本段台词之前。",
+          "description": "【已弃用，改用 visuals】单个无台词画面，桥接为一个 rhythm 镜头插在本段台词之前。只能表达「一个空镜 + 每句台词一个镜头」这一种固定切法，无法表达反应镜头与插入镜头。保留仅为兼容 1.0.0 文件。",
           "additionalProperties": false,
           "properties": {
             "scene_id": { "type": ["string", "null"] },
@@ -294,6 +295,11 @@
             "prompt": { "type": ["string", "null"] },
             "action_duration_s": { "type": ["number", "null"], "minimum": 1, "maximum": 15 }
           }
+        },
+        "visuals": {
+          "type": "array",
+          "description": "本段的镜头调度：有序的无台词镜头列表，用 after_line 插进台词序列之间。这是让成片像剧而不像轮流说话的关键——建立镜头交代事件，反应镜头给对方的脸，插入镜头给关键细节，然后才是台词。与 visual 二者只能填一个。",
+          "items": { "$ref": "#/$defs/visual_shot" }
         },
         "scene_id": { "type": ["string", "null"], "description": "本段发生的场景，透传给 timeline 便于复用同一张底图。" },
         "cliffhanger": {
@@ -313,6 +319,59 @@
           }
         },
         "notes": { "type": ["string", "null"] }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "镜头数预算。每多一个镜头就多一次静帧生成加一次视频生成，所以覆盖按强度分配：爽点给足，铺垫从简。预算统计的是本段总镜头数（台词镜头 + visuals），超预算由 selector 从最不重要的镜头开始裁掉并记入 repairs。",
+      "properties": {
+        "peak_threshold": {
+          "type": "number", "minimum": 0, "maximum": 10, "default": 7.0,
+          "description": "达到该强度算爽点，享受最高镜头预算。"
+        },
+        "peak_max_shots": {
+          "type": "integer", "minimum": 1, "maximum": 12, "default": 6,
+          "description": "爽点段的镜头数上限。6 个够走完「建立→反应→台词→插入→反打→台词」。"
+        },
+        "mid_max_shots": {
+          "type": "integer", "minimum": 1, "maximum": 12, "default": 3,
+          "description": "中间段的镜头数上限。够走「建立→台词→反应」。"
+        },
+        "low_max_shots": {
+          "type": "integer", "minimum": 1, "maximum": 12, "default": 1,
+          "description": "铺垫段的镜头数上限。一个镜头交代完就走。"
+        }
+      }
+    },
+    "visual_shot": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["establishing", "reaction", "insert", "action"],
+          "description": "establishing=建立镜头/空镜，交代地点与正在发生的事（远处一条龙飞过来）；reaction=反应镜头，切到某人脸上看他的表情，无台词；insert=插入镜头，关键细节特写（握紧的手、地上的碎杯）；action=动作镜头，人物做了什么。"
+        },
+        "after_line": {
+          "type": "integer", "minimum": 0, "default": 0,
+          "description": "插入位置：0=排在本段所有台词之前，k=排在第 k 句台词之后（1 起算）。必须逐个不减，读起来才是真正的镜头顺序。"
+        },
+        "subject": {
+          "type": ["string", "null"],
+          "description": "镜头对准谁的 character_id。reaction 必填（不指定是谁的脸，这个镜头就没法出图也没法锁脸）；insert/establishing 可留空。"
+        },
+        "scene_id": { "type": ["string", "null"] },
+        "shot_size": {
+          "type": ["string", "null"],
+          "enum": ["extreme_close_up", "close_up", "medium", "full", "wide", "insert", null]
+        },
+        "prompt": { "type": ["string", "null"], "description": "中文画面描述，具体、可画。" },
+        "action_duration_s": {
+          "type": ["number", "null"], "minimum": 1, "maximum": 15,
+          "description": "镜头时长。reaction 给 1-1.5 秒，insert 给 1-2 秒，establishing 给 2-4 秒。反应镜头拖到 4 秒会让节奏彻底垮掉。"
+        }
       }
     },
     "episode": {

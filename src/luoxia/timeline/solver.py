@@ -299,7 +299,7 @@ def _split_shot(shot: Dict[str, Any]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for idx, part in enumerate(parts):
         clone = {
-            **{k: v for k, v in shot.items() if k not in {"dialogue", "audio", "timing", "subtitle", "video", "lipsync"}},
+            **{k: v for k, v in shot.items() if k not in {"dialogue", "audio", "timing", "subtitle", "video", "lipsync", "transition"}},
             "shot_id": f"{shot['shot_id']}_p{idx + 1}",
             "timing_driver": "audio",
             "type": shot.get("type") or "dialogue",
@@ -326,8 +326,13 @@ def _split_shot(shot: Dict[str, Any]) -> List[Dict[str, Any]]:
             },
             "lipsync": {"required": False, "status": "skipped"},
             "subtitle": {"text": part},
+            # Inner boundaries of a split are hard cuts; the original transition still
+            # belongs to whatever now ends the group.
+            "transition": {"kind": "cut", "duration_s": 0.0, "note": None},
         }
         out.append(clone)
+    if shot.get("transition"):
+        out[-1]["transition"] = shot["transition"]
     return out
 
 

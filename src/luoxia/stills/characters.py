@@ -29,6 +29,8 @@ def ensure_character_sheets(
     cast: Sequence[Dict[str, Any]],
     *,
     output_root: Path | str,
+    # Reference portraits stay vertical even though the episode ships 16:9: a full-body
+    # locked look needs the height, and these images are never composited into the film.
     aspect_ratio: str = "9:16",
     generate: Optional[GenerateFn] = None,
     require_appearance: bool = False,

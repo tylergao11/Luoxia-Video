@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "work_id": "luoxia_demo",
   "title": "废物千金 · 第一章",
   "phase": "selected",
@@ -25,7 +25,13 @@
       "identity_reveal",
       "emotional_peak"
     ],
-    "target_episode_duration_s": 90
+    "target_episode_duration_s": 90,
+    "coverage": {
+      "peak_threshold": 7.0,
+      "peak_max_shots": 6,
+      "mid_max_shots": 3,
+      "low_max_shots": 1
+    }
   },
   "cast": [
     {
@@ -85,14 +91,34 @@
           "line_type": "dialogue"
         }
       ],
-      "visual": {
-        "scene_id": "scene_auction_entrance",
-        "shot_size": "wide",
-        "prompt": "夜晚豪华拍卖行门口，宾客盛装，林晚穿旧外套逆着人流站定",
-        "action_duration_s": 3
-      },
+      "visuals": [
+        {
+          "kind": "establishing",
+          "after_line": 0,
+          "scene_id": "scene_auction_entrance",
+          "shot_size": "wide",
+          "prompt": "夜晚豪华拍卖行门口，宾客盛装，林晚穿旧外套逆着人流站定",
+          "action_duration_s": 3
+        },
+        {
+          "kind": "reaction",
+          "after_line": 1,
+          "subject": "lin_wan",
+          "shot_size": "close_up",
+          "prompt": "林晚被当众点名，指尖一顿，抬眼时眼神冷下来",
+          "action_duration_s": 1.5
+        },
+        {
+          "kind": "insert",
+          "after_line": 2,
+          "subject": "lin_wan",
+          "shot_size": "insert",
+          "prompt": "旧外套口袋里攥到发白的指节",
+          "action_duration_s": 1.5
+        }
+      ],
       "cliffhanger": null,
-      "notes": "开场即冲突，符合前十秒必须见矛盾的要求。"
+      "notes": "开场即冲突，符合前十秒必须见矛盾的要求。镜头调度：建立→台词→反应→台词→插入，共 5 个镜头，在 intensity 7.0 的 6 镜预算内。"
     },
     {
       "beat_id": "b002",
@@ -191,14 +217,34 @@
           "line_type": "dialogue"
         }
       ],
-      "visual": {
-        "scene_id": "scene_auction_hall",
-        "shot_size": "insert",
-        "prompt": "画作右下角落款特写，缓慢推近，全场噪音骤停",
-        "action_duration_s": 3
-      },
+      "visuals": [
+        {
+          "kind": "insert",
+          "after_line": 0,
+          "scene_id": "scene_auction_hall",
+          "shot_size": "insert",
+          "prompt": "画作右下角落款特写，缓慢推近，全场噪音骤停",
+          "action_duration_s": 2
+        },
+        {
+          "kind": "reaction",
+          "after_line": 1,
+          "subject": "shen_ce",
+          "shot_size": "close_up",
+          "prompt": "沈策看清落款，瞳孔骤缩，握着酒杯的手一僵",
+          "action_duration_s": 1.5
+        },
+        {
+          "kind": "reaction",
+          "after_line": 2,
+          "subject": "shen_ce",
+          "shot_size": "extreme_close_up",
+          "prompt": "沈策喉结滚动，额角一滴汗，眼神彻底溃散",
+          "action_duration_s": 1.5
+        }
+      ],
       "cliffhanger": null,
-      "notes": "本集情绪峰值。依赖 b001 的羞辱与 b003 的废物定性，两者缺一则打脸落空。"
+      "notes": "本集情绪峰值。依赖 b001 的羞辱与 b003 的废物定性，两者缺一则打脸落空。镜头调度：插入落款→台词→反应→台词→反应，打脸的落点全在沈策的两个反应镜头上。"
     },
     {
       "beat_id": "b006",

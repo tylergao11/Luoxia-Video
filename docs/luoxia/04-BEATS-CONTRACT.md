@@ -203,7 +203,7 @@ selector 会自动修复第一条：发现保留段落的依赖被判丢弃，�
 
 ## 8. 不变量清单
 
-`validate_beats()` 逐条检查，共 20 条。测试用 `mutate_for_invariant_violation()` 对每一条构造反例，确认它确实会被抓住。
+`validate_beats()` 逐条检查，共 21 条。测试用 `mutate_for_invariant_violation()` 对每一条构造反例，确认它确实会被抓住。
 
 | # | 约束 | 生效阶段 |
 | --- | --- | --- |
@@ -213,7 +213,7 @@ selector 会自动修复第一条：发现保留段落的依赖被判丢弃，�
 | 4 | 相邻 `source_span` 不重叠（允许 gap，那是被跳过的原文） | 全部 |
 | 5 | 每段有 `beat_type` 和 `intensity` | scored+ |
 | 6 | 每段有 `decision` | selected+ |
-| 7 | 保留的段落必须有 `lines` 或 `visual` | selected+ |
+| 7 | 保留的段落必须有 `lines` 或 `visuals` | selected+ |
 | 8 | 丢弃必须有 `drop_reason`；`merged` 必须有存活的 `merged_into` | selected+ |
 | 9 | 保留段落的 `depends_on` 不得指向被丢弃的段落 | selected+ |
 | 10 | `filler` 不得 `keep` | 全部 |
@@ -227,6 +227,44 @@ selector 会自动修复第一条：发现保留段落的依赖被判丢弃，�
 | 18 | 至少一集；保留段落恰好归属一集，丢弃段落不得排进任何一集 | selected+ |
 | 19 | `beats_hash` / `selected_at` 齐备，且 `selection` 统计与重算一致 | selected+ |
 | 20 | `depends_on` 必须在叙事顺序上先于本段 | selected+ |
+| 21 | 镜头调度合法：`after_line` 不越界且不倒退；`reaction` 必须指明 `subject`；`subject` 在 `cast` 里；总镜头数不超预算 | 全部 / 预算 selected+ |
+
+---
+
+## 8b. 镜头调度（coverage）
+
+一个 beat 不是「一张画面 + 几句台词」。人看着像剧的东西，是镜头在切：
+
+> 远处一条龙压着云层飞来 → 切到少年的脸，他瞳孔一缩 → 他说了句话 → 插入他攥紧的剑柄 → 切到对面那人，眉毛一挑 → 那人回话
+
+第一版契约表达不了这个。`beat.visual` 是**单个**对象，桥接时固定插在该段所有台词之前，于是每个 beat 的镜头序列被硬编码成 `[一个空镜] + [每句台词一个镜头]`——成片只能是轮流说话。
+
+1.1.0 改成 `beat.visuals[]`：**有序**的无台词镜头列表，用 `after_line` 插进台词序列（`0`=所有台词之前，`k`=第 k 句台词之后）。`lines[]` 仍是台词的唯一真源，所以压缩比、字数统计、`beats_hash` 全都不受影响。
+
+| kind | 作用 | 建议时长 |
+| --- | --- | --- |
+| `establishing` | 建立镜头/空镜，交代地点与正在发生的事 | 2-4s |
+| `reaction` | 切到某人脸上，只看表情，无台词。必须写 `subject` | 1-1.5s |
+| `insert` | 关键细节特写（攥白的指节、碎掉的玉牌） | 1-2s |
+| `action` | 人物做了什么 | 2-3s |
+
+`reaction` 强制要求 `subject`，因为不指定是谁的脸，这个镜头既没法出图也没法用定妆图锁脸。桥接时反应镜头的 `characters` **只**放 `subject` 一个人——反应镜头里出现两个人就不是反应镜头了。反应/插入镜头的默认时长是 1.5 秒而不是 `default_action_duration_s`（4 秒），4 秒的反应镜头会把节奏彻底拖垮。
+
+### 镜头预算：覆盖是要花钱的
+
+每多一个镜头 = 多一次静帧生成 + 多一次视频生成。所以 `global.coverage` 按强度分配总镜头数（台词镜头 + `visuals` 一起算）：
+
+| 强度 | 上限 | 够拍什么 |
+| --- | --- | --- |
+| `>= peak_threshold`（默认 7.0） | 6 | 建立→反应→台词→插入→反打→台词 |
+| `>= compress_threshold`（默认 3.0） | 3 | 建立→台词→反应 |
+| 其余 | 1 | 一个镜头交代完就走 |
+
+超预算不是报错，而是由 selector 裁掉并记入 `repairs`（`coverage_trimmed`，medium）。裁剪顺序是 `insert → action → establishing → reaction`：**反应镜头最后才砍**，因为打脸类短剧的爽点落点就是对方那张脸；插入镜头是装饰，建立镜头的信息通常能从下一个台词镜头的背景里读出来。
+
+预算只约束我们**额外加的**无台词镜头：实际上限是 `max(预算, 台词数)`，所以一个台词多的段落不会因为内容取舍已经批准的台词而被判超支。
+
+镜头调度**不参与 `beats_hash`**。哈希只覆盖 `{decision, lines, source_span}`，也就是"砍什么、留什么、说什么"。覆盖方式是手法层决策，重调不该让选片结果失效——和 timeline 里 `transition` / `subtitle_style` 不进 `timeline_hash` 是同一个道理。
 
 ---
 
@@ -234,9 +272,12 @@ selector 会自动修复第一条：发现保留段落的依赖被判丢弃，�
 
 `build_timeline_draft(beats_doc, episode_id)` 把一集展开成镜头：
 
-- 带 `visual` 的段落 → 一个 `timing_driver=rhythm` 的镜头，排在该段台词之前
+- `visuals[]` 按 `after_line` **交织**进台词序列，每个 → 一个 `timing_driver=rhythm` 的镜头，`shot_id` 后缀 `_v<slot><序号>` 标明它插在哪
 - 每条 `line` → 一个 `timing_driver=audio` 的镜头，`delivery` 写进 `dialogue.emotion`
+- `kind` 映射成 timeline 的 `shots[].type`（`reaction` / `insert` / `action`，`establishing` 在无台词段落记作 `transition`），这样人工审片时一眼能看出镜头调度
+- 所有镜头默认 `transition.kind=cut`：正反打叠化会读成时间跳跃，反应镜头必须硬切
 - `cast` 透传，缺 `voice_id` 直接报错（TTS 跑不了）
+- 旧的单数 `visual` 仍然接受，视作一个 `after_line=0` 的 `establishing` 镜头，只为兼容 1.0.0 文件
 
 **草稿刻意不带任何时长**：所有音频驱动镜头的 `timing` 都是空的，因为时长只能来自 TTS 实测。这一点有专门的测试守着（`test_draft_carries_no_durations_of_its_own`），防止有人图省事在 beats 里塞一个估算秒数。
 
@@ -249,7 +290,7 @@ beats-select → beats-bridge → solve → freeze → render → compose
                 （草稿）      （合法 timeline）
 ```
 
-`tests/luoxia/test_beats_bridge.py::test_beats_to_solve_to_valid_timeline` 跑完整条链路，确认桥接产物过 solver 之后能通过 timeline 的全部 15 条不变量。
+`tests/luoxia/test_beats_bridge.py::test_beats_to_solve_to_valid_timeline` 跑完整条链路，确认桥接产物过 solver 之后能通过 timeline 的全部 16 条不变量。
 
 ---
 

@@ -24,7 +24,7 @@ def polish_timeline_prompts(
             still["prompt"] = _still_prompt(client, timeline, shot, cast_brief)
         if not request.get("prompt"):
             request["prompt"] = _motion_prompt(client, shot, still.get("prompt") or "")
-        still.setdefault("aspect_ratio", (timeline.get("global") or {}).get("aspect_ratio") or "9:16")
+        still.setdefault("aspect_ratio", (timeline.get("global") or {}).get("aspect_ratio") or "16:9")
     return timeline
 
 
@@ -33,7 +33,7 @@ def _still_prompt(client: LuoxiaLLM, timeline: Dict[str, Any], shot: Dict[str, A
     dialogue = (shot.get("dialogue") or {}).get("text") or ""
     context = dialogue or (shot.get("subtitle") or {}).get("description") or shot.get("shot_id")
     if not client.is_configured:
-        return seed or f"{shot.get('shot_size') or 'medium'} shot, {context}, cinematic, vertical 9:16"
+        return seed or f"{shot.get('shot_size') or 'medium'} shot, {context}, cinematic, widescreen 16:9"
     user = STILL_PROMPT_USER.format(
         cast_brief=cast_brief or "无",
         shot_id=shot.get("shot_id"),
@@ -55,7 +55,7 @@ def _still_prompt(client: LuoxiaLLM, timeline: Dict[str, Any], shot: Dict[str, A
             shot.setdefault("still", {})["negative_prompt"] = data["negative_prompt"]
         return prompt or seed or str(context)
     except Exception:
-        return seed or f"{context}, cinematic lighting, vertical composition"
+        return seed or f"{context}, cinematic lighting, widescreen composition"
 
 
 def _motion_prompt(client: LuoxiaLLM, shot: Dict[str, Any], still_prompt: str) -> str:

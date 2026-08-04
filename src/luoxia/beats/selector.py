@@ -8,6 +8,9 @@ from src.luoxia.beats.hashing import compute_beats_hash
 from src.luoxia.beats.validator import (
     RETAINED,
     compute_selection_stats,
+    coverage_budget,
+    coverage_settings,
+    coverage_visuals,
     script_char_count,
     validate_beats,
 )
@@ -34,8 +37,8 @@ def estimate_beat_duration_s(beat: Dict[str, Any]) -> float:
     """Rough length of a beat once filmed. Packing-only estimate, never a timing source."""
     lines = beat.get("lines") or []
     speech = script_char_count(beat) / CHARS_PER_SECOND + LINE_OVERHEAD_S * len(lines)
-    visual = beat.get("visual") or {}
-    return speech + float(visual.get("action_duration_s") or 0)
+    silent = sum(float(v.get("action_duration_s") or 0) for v in coverage_visuals(beat))
+    return speech + silent
 
 
 def apply_thresholds(beats_doc: Dict[str, Any]) -> Dict[str, int]:
@@ -108,7 +111,7 @@ def repair_dependencies(beats_doc: Dict[str, Any]) -> List[str]:
             dep["drop_reason"] = None
             dep["merged_into"] = None
             rescued.append(dep.get("beat_id"))
-            if not (dep.get("lines") or dep.get("visual")):
+            if not (dep.get("lines") or coverage_visuals(dep)):
                 raise SelectionError(
                     f"{dep.get('beat_id')} must be retained for {payoff_id} but has no lines or visual to show"
                 )
@@ -250,7 +253,7 @@ def ensure_retained_payload(beats_doc: Dict[str, Any]) -> None:
     for beat in beats_doc.get("beats") or []:
         if beat.get("decision") not in RETAINED:
             continue
-        if beat.get("lines") or beat.get("visual"):
+        if beat.get("lines") or coverage_visuals(beat):
             continue
         summary = (beat.get("summary") or beat.get("beat_id") or "……").strip()
         text = summary if len(summary) <= 36 else summary[:35] + "。"
@@ -297,6 +300,7 @@ def select_beats(
     counts = apply_thresholds(beats_doc)
     rescued = repair_dependencies(beats_doc)
     ensure_retained_payload(beats_doc)
+    cut_shots = _enforce_coverage_budget(beats_doc)
 
     for beat in beats_doc.get("beats") or []:
         beat["script_char_count"] = script_char_count(beat)
@@ -322,6 +326,8 @@ def select_beats(
         detail += f"; rescued setups: {', '.join(rescued)}"
     if trimmed:
         detail += f"; auto-trimmed lines on {len(set(trimmed))} beat(s)"
+    if cut_shots:
+        detail += f"; auto-trimmed coverage on {len(set(cut_shots))} beat(s)"
     q = beats_doc["quality"]
     detail += f"; repairs={q['repair_count']} (worst={q['worst_severity'] or 'none'})"
     beats_doc.setdefault("audit", []).append(
@@ -337,6 +343,62 @@ def select_beats(
         repair_log.enforce(beats_doc, max_severity=max_repair_severity)
     _ = counts
     return beats_doc
+
+
+# Which silent shot to sacrifice first when a beat exceeds its coverage budget.
+# The reaction shot survives longest: in a face-slap drama the opponent's face *is* the
+# payoff, whereas an insert is decoration and an establishing shot can be read off the
+# background of the dialogue shot that follows it.
+_COVERAGE_DROP_ORDER = {"insert": 0, "action": 1, "establishing": 2, "reaction": 3}
+
+
+def _enforce_coverage_budget(beats_doc: Dict[str, Any]) -> List[str]:
+    """Cut surplus silent shots so a beat fits its intensity's shot budget.
+
+    Each shot is a paid still plus a paid video generation, so an over-eager shot list is
+    a real budget overrun, not a style preference. Every cut is logged: losing a reaction
+    shot changes how the beat plays.
+    """
+    coverage = coverage_settings(beats_doc)
+    g = beats_doc.get("global") or {}
+    touched: List[str] = []
+
+    for beat in beats_doc.get("beats") or []:
+        if beat.get("decision") not in RETAINED:
+            continue
+        visuals = beat.get("visuals")
+        if not visuals:
+            continue
+        line_count = len(beat.get("lines") or [])
+        allowance = max(0, coverage_budget(beat, coverage, g) - line_count)
+        if len(visuals) <= allowance:
+            continue
+
+        keep_flags = [True] * len(visuals)
+        order = sorted(
+            range(len(visuals)),
+            key=lambda i: (_COVERAGE_DROP_ORDER.get(str(visuals[i].get("kind")), 1), -i),
+        )
+        surplus = len(visuals) - allowance
+        dropped = []
+        for i in order[:surplus]:
+            keep_flags[i] = False
+            dropped.append(str(visuals[i].get("kind")))
+
+        beat["visuals"] = [v for v, keep in zip(visuals, keep_flags) if keep]
+        touched.append(beat["beat_id"])
+        repair_log.record(
+            beats_doc,
+            code="coverage_trimmed",
+            severity="medium",
+            beat_id=beat["beat_id"],
+            detail=(
+                f"intensity {beat.get('intensity')} allows {allowance} silent shot(s) "
+                f"beside {line_count} line(s); dropped {surplus} ({', '.join(dropped)})"
+            ),
+            actor="selector",
+        )
+    return touched
 
 
 _CLAUSE_ENDS = "，,。！？!?；;、…"

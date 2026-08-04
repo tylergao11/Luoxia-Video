@@ -24,7 +24,7 @@ def test_example_passes(example):
     assert validate_beats(example, raise_on_error=False) == []
 
 
-@pytest.mark.parametrize("invariant", list(range(1, 21)))
+@pytest.mark.parametrize("invariant", list(range(1, 22)))
 def test_each_invariant_fails(example, invariant):
     bad = mutate_for_invariant_violation(example, invariant)
     with pytest.raises(BeatsValidationError) as exc:

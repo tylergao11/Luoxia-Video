@@ -142,7 +142,7 @@ ffmpeg -i in.mp4 -c:v copy -an out.mp4
 
 **坑二：I2V 传 `aspect_ratio` 会拉伸源图。** 官方说明：I2V 默认沿用输入图比例，显式指定 `aspect_ratio` 会**覆盖并拉伸**。
 
-做 9:16 竖屏短剧的正确姿势是——**出图阶段就生成 9:16 的静帧，I2V 请求时省略 `aspect_ratio` 字段**。契约不变量第 13 条（`still.aspect_ratio == global.aspect_ratio`）就是这条规则的机器化保障。
+做 16:9 横屏短剧的正确姿势是——**出图阶段就生成 16:9 的静帧，I2V 请求时省略 `aspect_ratio` 字段**。契约不变量第 13 条（`still.aspect_ratio == global.aspect_ratio`）就是这条规则的机器化保障。
 
 **坑三：视频 URL 是临时的。** 官方标注为 temporary URL。必须在拿到后立即下载落盘，把 `local_path` 作为下游唯一引用，`source_url` 仅供排查。落盘后写 `fetched_at`。
 

@@ -80,3 +80,41 @@ def measure_media_duration_s(path: str | Path, *, ffprobe_path: Optional[str] = 
     if value < 0:
         raise RuntimeError(f"invalid negative duration for {media}: {value}")
     return value
+
+
+def measure_video_size(path: str | Path, *, ffprobe_path: Optional[str] = None) -> tuple[int, int]:
+    """Return (width, height) of the first video stream.
+
+    Subtitle geometry must follow the real frame, not what the timeline claims the
+    resolution is, or margins land in the wrong place when a provider returns an
+    off-spec size.
+    """
+    media = Path(path)
+    if not media.is_file():
+        raise FileNotFoundError(f"media file not found: {media}")
+
+    probe = ffprobe_path or resolve_ffprobe_path()
+    if not probe:
+        raise RuntimeError("ffprobe not found; cannot measure video size")
+
+    result = subprocess.run(
+        [
+            probe,
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "json",
+            str(media),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed for {media}: {result.stderr.strip()}")
+
+    streams = json.loads(result.stdout or "{}").get("streams") or []
+    if not streams or not streams[0].get("width") or not streams[0].get("height"):
+        raise RuntimeError(f"ffprobe returned no video size for {media}")
+    return int(streams[0]["width"]), int(streams[0]["height"])
