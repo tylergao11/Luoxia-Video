@@ -8,6 +8,7 @@ from src.luoxia.beats.io import load_beats, save_beats
 from src.luoxia.beats.selector import select_beats
 from src.luoxia.beats.to_timeline import build_timeline_draft
 from src.luoxia.beats.validator import BeatsValidationError, validate_beats
+from src.luoxia.env import load_env_once
 from src.luoxia.paths import REPO_ROOT, timeline_frozen_path, timeline_path
 from src.luoxia.timeline.cost import estimate_timeline_cost
 from src.luoxia.timeline.freeze import BudgetExceededError, freeze_timeline, unfreeze_timeline
@@ -17,6 +18,9 @@ from src.luoxia.timeline.validator import TimelineValidationError, validate_time
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Every subcommand that touches TTS, stills or video needs .env; nothing else in the
+    # luoxia package loads it.
+    load_env_once()
     parser = argparse.ArgumentParser(prog="luoxia", description="Luoxia audio-first short-drama harness")
     parser.add_argument("--output-root", default="output", help="Episode output root (default: output)")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -58,11 +62,6 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--budget", type=float, default=10.0, help="USD budget ceiling before freeze")
     p_run.add_argument("--provider", default="xai")
     p_run.add_argument("--model", default="grok-imagine-video-1.5")
-    p_run.add_argument(
-        "--still-hold",
-        action="store_true",
-        help="Skip cloud video API; hold stills with ffmpeg (also auto if XAI_API_KEY missing)",
-    )
     p_run.add_argument("--no-resume", action="store_true", help="Ignore existing beats/timeline and rebuild")
     p_run.add_argument("--skip-compose", action="store_true")
     p_run.add_argument(
@@ -212,7 +211,6 @@ def main(argv: list[str] | None = None) -> int:
                 budget_usd=args.budget,
                 provider=args.provider,
                 model=args.model,
-                still_hold=args.still_hold,
                 skip_compose=args.skip_compose,
                 resume=not args.no_resume,
                 max_repair_severity=args.max_repair_severity,

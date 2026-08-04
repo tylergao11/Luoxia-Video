@@ -8,7 +8,7 @@
 |------|------|
 | `session`（默认） | 订阅池 / OAuth 会话；缺会话 → **Need login**，不是缺 API Key |
 | `api_key` | 环境变量长效 Key（按量备用） |
-| `offline` | 不走云（still-hold / 本地） |
+| `offline` | 不走云；视频阶段直接报错停下，不会拿静帧凑一集 |
 
 ## 供应商 `LUOXIA_AUTH_PROVIDER`
 

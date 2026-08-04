@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -11,10 +10,10 @@ from src.luoxia.beats.selector import select_beats
 from src.luoxia.beats.to_timeline import build_timeline_draft
 from src.luoxia.beats.validator import validate_beats
 from src.luoxia.compose.assembler import assemble_episode
+from src.luoxia.env import load_env_once
 from src.luoxia.llm.client import LuoxiaLLM
 from src.luoxia.paths import beats_path, timeline_frozen_path, timeline_path
 from src.luoxia.render.runner import render_timeline_videos
-from src.luoxia.render.still_hold import render_still_hold_videos
 from src.luoxia.rewrite import make_rewrite_fn
 from src.luoxia.stills.characters import ensure_character_sheets
 from src.luoxia.stills.prompts import polish_timeline_prompts
@@ -46,25 +45,28 @@ def run_from_novel(
     budget_usd: float = 10.0,
     provider: str = "xai",
     model: str = "grok-imagine-video-1.5",
-    still_hold: bool = False,
     skip_compose: bool = False,
     resume: bool = True,
     max_repair_severity: Optional[str] = None,
     lock_faces: bool = True,
     beats_overrides: Optional[Dict[str, Any]] = None,
     on_step: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    render_videos: Optional[Callable[..., Any]] = None,
 ) -> RunResult:
     """Full audio-first pipeline: novel → beats → timeline → audio → stills → video → final.mp4.
 
     Requires:
-      - DASHSCOPE_API_KEY for LLM + TTS + stills
-      - XAI_API_KEY for Grok video (unless still_hold=True)
+      - DASHSCOPE_API_KEY for LLM + TTS + stills (read from .env)
+      - resolvable video credentials: either session login (subscription pool) or
+        LUOXIA_AUTH_MODE=api_key with XAI_API_KEY
 
     `max_repair_severity` refuses to continue when the harness had to patch the model's
     output too heavily; see beats_doc["quality"]. `lock_faces` generates one portrait per
     character up front and reuses it as an I2I reference in every shot. `beats_overrides`
     tunes the selection budget (keep_threshold, max_compression_ratio, ...) per work.
+    `render_videos` overrides the render step; only tests should need it.
     """
+    load_env_once()
     root = Path(output_root)
     novel_path = Path(novel_path)
     text = novel_path.read_text(encoding="utf-8")
@@ -183,15 +185,11 @@ def run_from_novel(
 
     # --- 9. video ---
     if tl.get("phase") in {"frozen", "rendering"}:
-        use_hold = still_hold or not os.getenv("XAI_API_KEY")
-        if use_hold and provider == "xai" and not still_hold:
-            note("video_fallback", reason="XAI_API_KEY missing → still-hold")
-        if still_hold or (use_hold and provider == "xai"):
-            note("video_still_hold")
-            render_still_hold_videos(tl, output_root=ep_root)
-        else:
-            note("video_cloud")
-            render_timeline_videos(tl, output_root=ep_root, timeline_path=tpath)
+        render = render_videos or render_timeline_videos
+        if render_videos is None:
+            assert_video_credentials()
+        note("video_cloud")
+        render(tl, output_root=ep_root, timeline_path=tpath)
         save_timeline(tpath, tl)
 
     # --- 10. compose ---
@@ -212,10 +210,33 @@ def run_from_novel(
     )
 
 
-def _make_tts(episode_dir: Path, timeline: dict):
-    from src.audio.tts import TTSProcessor
+def assert_video_credentials() -> None:
+    """Refuse to start rendering when no credential can pay for it.
 
-    tts = TTSProcessor()
+    This used to be `not os.getenv("XAI_API_KEY")`, which is blind to session auth: a
+    signed-in subscription-pool user looked unconfigured, and the pipeline quietly
+    swapped in held stills — producing a silent slideshow that still reported success.
+    Ask the auth layer instead, and fail loudly.
+    """
+    from src.auth.resolver import status
+
+    st = status()
+    if st.mode == "offline":
+        raise RuntimeError(
+            "auth mode is offline, so cloud video cannot run. Log in to the subscription "
+            "pool or set LUOXIA_AUTH_MODE=api_key with XAI_API_KEY."
+        )
+    if not st.signed_in:
+        raise RuntimeError(
+            f"no video credential resolved (auth mode={st.mode}, provider={st.provider}): "
+            f"{st.message}"
+        )
+
+
+def _make_tts(episode_dir: Path, timeline: dict):
+    from src.audio.xai_tts import XaiTTS
+
+    tts = XaiTTS()
     cast_voices = {
         c.get("character_id"): c.get("voice_id")
         for c in (timeline.get("cast") or [])

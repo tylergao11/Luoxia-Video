@@ -37,12 +37,12 @@ def resolve_credential(
 
     - session: active pool adapter must return a session token (LoginRequiredError if not)
     - api_key: adapter resolves long-lived env keys
-    - offline: raises AuthError with code offline (callers use still-hold / skip cloud)
+    - offline: raises AuthError with code offline (callers must skip cloud, not fake it)
     """
     cfg = config or load_auth_config()
     if cfg.mode == "offline":
         raise AuthError(
-            "Auth mode is offline — cloud generation disabled (use still-hold / local).",
+            "Auth mode is offline — cloud generation disabled. Log in or switch to api_key mode.",
             code="offline",
         )
 

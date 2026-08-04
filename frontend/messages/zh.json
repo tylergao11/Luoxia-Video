@@ -659,7 +659,7 @@
     "authLogoutOk": "已退出",
     "authFailed": "鉴权操作失败",
     "authApiKeyHint": "当前为 API Key 模式：在下方填写各厂商 Key（按量计费）。",
-    "authOfflineHint": "离线模式：云生成关闭，可用 still-hold / 本地路径。"
+    "authOfflineHint": "离线模式：云生成关闭，视频阶段会直接停下，不会用静帧凑成片。"
   },
   "project": {
     "createTitle": "创建新项目",

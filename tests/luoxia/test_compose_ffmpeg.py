@@ -6,8 +6,12 @@ from typing import Any, Dict, List
 
 import pytest
 
-from src.luoxia.compose.assembler import assemble_episode
-from src.luoxia.media.ffprobe import measure_media_duration_s, resolve_ffprobe_path
+from src.luoxia.compose.assembler import assemble_episode, short_clips
+from src.luoxia.media.ffprobe import (
+    measure_media_duration_s,
+    measure_video_size,
+    resolve_ffprobe_path,
+)
 from src.luoxia.timeline.hashing import compute_timeline_hash
 from src.luoxia.timeline.validator import validate_timeline
 from src.utils.system_check import get_ffmpeg_path
@@ -199,6 +203,66 @@ def test_dissolve_survives_a_clip_with_no_slack(tmp_path):
     out = tmp_path / "tight.mp4"
     assemble_episode(timeline, output_path=out, work_dir=tmp_path / "_compose_tight")
     assert measure_media_duration_s(out) == pytest.approx(_expected_total(timeline), abs=0.08)
+
+
+def test_short_provider_clip_does_not_shorten_the_episode(tmp_path):
+    """Providers ignore the requested duration: a 5s request can return a 2s clip.
+
+    Without padding, that segment just ends early — the episode drifts off the master
+    clock and the rest of the line plays over the following shot.
+    """
+    timeline = _timeline(tmp_path, transitions=[CUT, CUT, CUT])
+    shot = timeline["shots"][2]
+    assert shot["timing"]["target_duration_s"] == 4.8
+    short = _make_video(tmp_path / "media" / "short.mp4", seconds=2.0, color="green")
+    shot["video"]["local_path"] = str(short)
+
+    out = tmp_path / "short.mp4"
+    assemble_episode(timeline, output_path=out, work_dir=tmp_path / "_compose_short")
+
+    assert measure_media_duration_s(out) == pytest.approx(_expected_total(timeline), abs=0.08)
+    # The shortfall is recorded, so a truncating provider is visible rather than inferred.
+    assert short_clips(timeline) == [
+        {"shot_id": "s3", "delivered_s": 2.0, "required_s": 4.8}
+    ]
+
+
+def test_dialogue_shot_with_missing_audio_refuses_to_compose(tmp_path):
+    """Silence is only legitimate for silent shots; a lost line must not pass as one."""
+    timeline = _timeline(tmp_path, transitions=[CUT, CUT, CUT])
+    timeline["shots"][1]["audio"]["local_path"] = str(tmp_path / "gone.wav")
+
+    with pytest.raises(FileNotFoundError, match="no audio file"):
+        assemble_episode(timeline, output_path=tmp_path / "x.mp4", work_dir=tmp_path / "_c3")
+
+
+def test_off_size_provider_clip_is_normalised_to_the_declared_frame(tmp_path):
+    """Asking grok for 1080p returns 1920x1088, and concat copies streams.
+
+    A segment that disagrees with the others on size or fps yields a broken master, so
+    every segment is scaled to the frame the contract declares.
+    """
+    timeline = _timeline(tmp_path, transitions=[CUT, CUT, CUT])
+    timeline["global"].update({"resolution": "720p", "aspect_ratio": "16:9", "fps": 24})
+    odd = tmp_path / "media" / "odd.mp4"
+    subprocess.run(
+        [FFMPEG, "-y", "-f", "lavfi", "-i", "color=c=teal:s=1280x728:r=30:d=6",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(odd)],
+        capture_output=True, text=True, check=True, timeout=120,
+    )
+    timeline["shots"][2]["video"]["local_path"] = str(odd)
+
+    out = tmp_path / "normalised.mp4"
+    assemble_episode(timeline, output_path=out, work_dir=tmp_path / "_compose_norm")
+
+    assert measure_video_size(out) == (1280, 720)
+    assert measure_media_duration_s(out) == pytest.approx(_expected_total(timeline), abs=0.08)
+
+
+def test_full_length_clips_are_not_flagged(tmp_path):
+    timeline = _timeline(tmp_path, transitions=[CUT, CUT, CUT])
+    assemble_episode(timeline, output_path=tmp_path / "ok.mp4", work_dir=tmp_path / "_compose_ok")
+    assert short_clips(timeline) == []
 
 
 def test_subtitles_are_burned_in(tmp_path):

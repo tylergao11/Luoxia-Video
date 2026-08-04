@@ -127,8 +127,9 @@ class LLMAdapter:
 
     def _get_default_model(self) -> str:
         if self.provider == "openai":
-            # Session pool (xAI) often uses grok-* chat models when OPENAI_MODEL unset.
-            return os.getenv("OPENAI_MODEL") or os.getenv("LUOXIA_POOL_CHAT_MODEL") or "grok-4"
+            # Session pool (xAI) chat. grok-4 is not in GET /v1/models any more — it only
+            # still resolves through an alias, so pin a model the account actually lists.
+            return os.getenv("OPENAI_MODEL") or os.getenv("LUOXIA_POOL_CHAT_MODEL") or "grok-4.5"
         return self._DASHSCOPE_MODEL_FALLBACK_CHAIN[0]
 
     def chat(

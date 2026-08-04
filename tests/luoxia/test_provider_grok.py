@@ -42,7 +42,16 @@ def test_local_still_becomes_data_uri(tmp_path):
     url = _coerce_image_url(str(png))
     assert url.startswith("data:image/png;base64,")
     assert _coerce_image_url("https://example.com/a.png") == "https://example.com/a.png"
-    assert _coerce_image_url(str(tmp_path / "missing.png")) is None
+
+
+def test_missing_still_refuses_instead_of_dropping_to_t2v(tmp_path):
+    """A shot that asked for i2v must not be quietly generated from text alone."""
+    import pytest
+
+    from src.models.grok import _coerce_image_url
+
+    with pytest.raises(FileNotFoundError, match="refusing to fall back"):
+        _coerce_image_url(str(tmp_path / "missing.png"))
 
 
 def test_pricing_registered_via_adapter():

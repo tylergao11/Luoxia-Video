@@ -162,13 +162,13 @@ def test_transition_is_not_part_of_the_freeze_hash(example):
 
 
 def test_frame_size_follows_aspect_and_resolution(example):
-    assert frame_size(example) == (1280, 720)
+    assert frame_size(example) == (1920, 1080)
     hd = copy.deepcopy(example)
-    hd["global"]["resolution"] = "1080p"
-    assert frame_size(hd) == (1920, 1080)
+    hd["global"]["resolution"] = "720p"
+    assert frame_size(hd) == (1280, 720)
     portrait = copy.deepcopy(example)
     portrait["global"]["aspect_ratio"] = "9:16"
-    assert frame_size(portrait) == (720, 1280)
+    assert frame_size(portrait) == (1080, 1920)
 
 
 def test_geometry_derives_from_the_real_frame(example):

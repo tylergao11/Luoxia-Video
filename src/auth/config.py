@@ -13,7 +13,7 @@ from typing import Any, Dict, Literal, Optional
 
 # session = subscription-pool / OAuth session (default product path)
 # api_key = long-lived vendor keys in env (alternate)
-# offline = no cloud generation; still-hold / local only
+# offline = no cloud generation; paid steps refuse rather than substitute placeholders
 AuthMode = Literal["session", "api_key", "offline"]
 
 # Default pool provider id — swap via config without code forks in pipeline.

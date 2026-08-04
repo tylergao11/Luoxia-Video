@@ -9,7 +9,7 @@
   "global": {
     "fps": 25,
     "aspect_ratio": "16:9",
-    "resolution": "720p",
+    "resolution": "1080p",
     "lead_in_s": 0.3,
     "tail_out_s": 0.5,
     "min_speed_ratio": 0.92,
@@ -31,16 +31,16 @@
     {
       "character_id": "lin_wan",
       "display_name": "林晚",
-      "voice_id": "longxiaochun",
-      "tts_provider": "dashscope.cosyvoice",
+      "voice_id": "luna",
+      "tts_provider": "xai.tts",
       "reference_image_asset_id": "asset_char_linwan_v3",
       "voice_instructions": "清冷、克制，语速偏慢"
     },
     {
       "character_id": "shen_ce",
       "display_name": "沈策",
-      "voice_id": "longshu",
-      "tts_provider": "dashscope.cosyvoice",
+      "voice_id": "atlas",
+      "tts_provider": "xai.tts",
       "reference_image_asset_id": "asset_char_shence_v2",
       "voice_instructions": "低沉、压抑"
     }
@@ -78,7 +78,7 @@
         "model": "grok-imagine-video-1.5",
         "request": {
           "duration": 4,
-          "resolution": "720p",
+          "resolution": "1080p",
           "prompt": "缓慢推镜，雨滴打在积水上泛起涟漪，霓虹光轻微闪烁"
         },
         "has_audio_track": false,
@@ -145,7 +145,7 @@
         "model": "grok-imagine-video-1.5",
         "request": {
           "duration": 3,
-          "resolution": "720p",
+          "resolution": "1080p",
           "prompt": "极轻微的呼吸起伏，睫毛颤动，镜头几乎静止"
         },
         "has_audio_track": false,
@@ -213,7 +213,7 @@
         "model": "grok-imagine-video-1.5",
         "request": {
           "duration": 10,
-          "resolution": "720p",
+          "resolution": "1080p",
           "prompt": "极缓慢的侧向平移，雨丝持续下落，人物几乎静止只有肩膀微动"
         },
         "has_audio_track": false,
@@ -291,7 +291,7 @@
         "model": "grok-imagine-video-1.5",
         "request": {
           "duration": 5,
-          "resolution": "720p",
+          "resolution": "1080p",
           "prompt": "情绪特写，嘴唇轻颤，一滴水沿脸颊滑落"
         },
         "request_id": "d97415a1-5796-b7ec-379f-4e6819e08fdf",

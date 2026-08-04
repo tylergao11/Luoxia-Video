@@ -6,9 +6,11 @@ from src.luoxia.beats.hashing import compute_beats_hash
 from src.luoxia.beats.validator import RETAINED
 
 DEFAULT_GLOBAL: Dict[str, Any] = {
-    "fps": 25,
+    # grok-imagine-video delivers 24fps; declaring 25 only duplicates frames on encode.
+    "fps": 24,
     "aspect_ratio": "16:9",
-    "resolution": "720p",
+    # 1080p costs the same as 720p on grok-imagine-video-1.5, so there is no reason to ship less.
+    "resolution": "1080p",
     "lead_in_s": 0.3,
     "tail_out_s": 0.5,
     "min_speed_ratio": 0.92,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
 from src.luoxia.stills.characters import (
@@ -10,24 +12,38 @@ from src.luoxia.stills.characters import (
 )
 from src.luoxia.stills.runner import render_timeline_stills
 
+def _write_stub_image(path, width=640, height=360):
+    """A decodable image at a deliberately off-frame size, as a provider might return."""
+    from src.utils.system_check import get_ffmpeg_path
+
+    ffmpeg = get_ffmpeg_path()
+    if not ffmpeg:
+        pytest.skip("ffmpeg not available")
+    subprocess.run(
+        [ffmpeg, "-y", "-v", "error", "-f", "lavfi",
+         "-i", f"color=c=gray:s={width}x{height}", "-frames:v", "1", str(path)],
+        check=True,
+    )
+
 
 def _recorder(tmp_path):
     calls = []
 
-    def generate(prompt, output_path, *, size, negative_prompt=None, ref_image_paths=None):
+    def generate(prompt, output_path, *, aspect_ratio, negative_prompt=None, ref_images=None):
         calls.append(
             {
                 "prompt": prompt,
                 "output": output_path,
-                "size": size,
-                "refs": list(ref_image_paths or []),
+                "aspect_ratio": aspect_ratio,
+                "refs": [r["path"] for r in (ref_images or [])],
+                "ref_names": [r.get("display_name") for r in (ref_images or [])],
             }
         )
         from pathlib import Path
 
         p = Path(output_path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(b"png")
+        _write_stub_image(p)
         return str(p)
 
     return generate, calls
@@ -109,6 +125,25 @@ def test_stills_pass_each_speaker_portrait_as_reference(tmp_path):
     by_out = {c["output"]: c for c in calls}
     s1_call = next(c for out, c in by_out.items() if out.endswith("s1.png"))
     assert s1_call["refs"] == [cast[0]["reference_image_path"]]
+
+    # Screen order, and each portrait labelled, so a two-reference prompt can say who is who.
+    s2_call = next(c for out, c in by_out.items() if out.endswith("s2.png"))
+    assert s2_call["ref_names"] == ["沈策", "林晚"]
+
+
+def test_still_is_resized_to_the_frame_it_will_open(tmp_path):
+    """A still is the clip's first frame, so an off-size still means the provider rescales it."""
+    from src.luoxia.media.ffprobe import measure_video_size
+
+    gen, _calls = _recorder(tmp_path)
+    timeline = {
+        "global": {"aspect_ratio": "16:9", "resolution": "1080p"},
+        "shots": [{"shot_id": "s1", "characters": [], "still": {"prompt": "空镜"}}],
+    }
+    render_timeline_stills(timeline, output_root=tmp_path, generate=gen)
+
+    still = timeline["shots"][0]["still"]
+    assert measure_video_size(still["local_path"]) == (1920, 1080)
 
 
 def test_reference_map_ignores_missing_files(tmp_path):

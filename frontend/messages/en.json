@@ -659,7 +659,7 @@
     "authLogoutOk": "Logged out",
     "authFailed": "Auth action failed",
     "authApiKeyHint": "API-key mode: paste vendor keys below (pay-per-call).",
-    "authOfflineHint": "Offline: cloud generation off; still-hold / local only."
+    "authOfflineHint": "Offline: cloud generation off; video steps stop instead of substituting stills."
   },
   "project": {
     "createTitle": "Create New Project",

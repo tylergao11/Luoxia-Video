@@ -82,20 +82,21 @@ def wired(tmp_path, monkeypatch):
 
 
 def _run(novel, root, **kwargs):
+    # Injecting the render step is the only way to skip the paid video call; there is
+    # deliberately no offline video mode that could pass off held stills as an episode.
+    kwargs.setdefault("render_videos", lambda tl, **k: tl)
     return pipeline_mod.run_from_novel(
         novel,
         output_root=root / "out",
         work_id="e2e",
-        still_hold=True,
         skip_compose=True,
         beats_overrides=LOOSE,
         **kwargs,
     )
 
 
-def test_novel_to_frozen_timeline_without_touching_paid_apis(wired, monkeypatch):
+def test_novel_to_frozen_timeline_without_touching_paid_apis(wired):
     novel, root, generated = wired
-    monkeypatch.setattr(pipeline_mod, "render_still_hold_videos", lambda tl, **k: tl)
 
     result = _run(novel, root)
 
@@ -115,9 +116,8 @@ def test_novel_to_frozen_timeline_without_touching_paid_apis(wired, monkeypatch)
         assert shot["timing"]["end_s"] > shot["timing"]["start_s"]
 
 
-def test_faces_are_locked_end_to_end(wired, monkeypatch):
+def test_faces_are_locked_end_to_end(wired):
     novel, root, generated = wired
-    monkeypatch.setattr(pipeline_mod, "render_still_hold_videos", lambda tl, **k: tl)
 
     result = _run(novel, root)
 
@@ -128,9 +128,8 @@ def test_faces_are_locked_end_to_end(wired, monkeypatch):
     assert with_refs, "shots with characters must carry portrait references"
 
 
-def test_faces_can_be_turned_off(wired, monkeypatch):
+def test_faces_can_be_turned_off(wired):
     novel, root, generated = wired
-    monkeypatch.setattr(pipeline_mod, "render_still_hold_videos", lambda tl, **k: tl)
 
     _run(novel, root, lock_faces=False)
     assert generated["sheets"] == []
@@ -139,9 +138,6 @@ def test_faces_can_be_turned_off(wired, monkeypatch):
 def test_strict_gate_stops_before_any_spending(wired, monkeypatch):
     novel, root, generated = wired
     spent = []
-    monkeypatch.setattr(
-        pipeline_mod, "render_still_hold_videos", lambda tl, **k: spent.append("video")
-    )
 
     def mute_payoff(messages):
         data = _fake_chat_json(messages)
@@ -155,7 +151,12 @@ def test_strict_gate_stops_before_any_spending(wired, monkeypatch):
     )
 
     with pytest.raises(StrictRepairError):
-        _run(novel, root, max_repair_severity="medium")
+        _run(
+            novel,
+            root,
+            max_repair_severity="medium",
+            render_videos=lambda tl, **k: spent.append("video"),
+        )
 
     assert generated["sheets"] == [], "no portraits should be generated after a refusal"
     assert generated["stills"] == []

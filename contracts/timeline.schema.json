@@ -34,13 +34,19 @@
       "required": ["fps", "aspect_ratio", "resolution", "lead_in_s", "tail_out_s"],
       "additionalProperties": false,
       "properties": {
-        "fps": { "type": "integer", "minimum": 1, "maximum": 60, "default": 25 },
+        "fps": {
+          "type": "integer", "minimum": 1, "maximum": 60, "default": 24,
+          "description": "合成时所有片段会被归一到这个帧率。grok-imagine-video 原生交付 24fps。"
+        },
         "aspect_ratio": {
           "type": "string",
           "enum": ["16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3"],
           "default": "16:9"
         },
-        "resolution": { "type": "string", "enum": ["480p", "720p", "1080p"], "default": "720p" },
+        "resolution": {
+          "type": "string", "enum": ["480p", "720p", "1080p"], "default": "1080p",
+          "description": "grok-imagine-video-1.5 的 t2v/i2v 原生支持 1080p，且与 720p 同价，故默认取 1080p。"
+        },
         "lead_in_s": {
           "type": "number", "minimum": 0, "maximum": 3, "default": 0.3,
           "description": "台词开口前的画面提前量。给 I2V 一点起势时间，避免一开画就说话。"
@@ -72,7 +78,7 @@
           "character_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
           "display_name": { "type": "string" },
           "voice_id": { "type": "string" },
-          "tts_provider": { "type": "string", "default": "dashscope.cosyvoice" },
+          "tts_provider": { "type": "string", "default": "xai.tts" },
           "reference_image_asset_id": { "type": ["string", "null"] },
           "voice_instructions": { "type": ["string", "null"], "description": "情绪/风格指令，若 TTS 供应商支持。" }
         }
@@ -287,6 +293,18 @@
           "description": "是否已执行 ffmpeg -an 剥离。为 false 且 has_audio_track 为 true 时，禁止进入合成阶段。"
         },
         "moderation_passed": { "type": ["boolean", "null"], "description": "对应 Grok 的 respect_moderation。false 视为失败。" },
+        "mode": {
+          "type": ["string", "null"], "enum": ["i2v", "t2v", null],
+          "description": "是否真的用静帧做了首帧。t2v 意味着这一镜没有锁脸也没有分镜构图，必须显式可见。"
+        },
+        "padded_from_s": {
+          "type": ["number", "null"], "minimum": 0,
+          "description": "供应商实际交付的片长。仅当短于所需、合成时定住末帧补足才写入。"
+        },
+        "padded_to_s": {
+          "type": ["number", "null"], "minimum": 0,
+          "description": "补足到的目标片段长度，与 padded_from_s 成对出现。"
+        },
         "attempts": { "type": "integer", "minimum": 0, "default": 0 },
         "cost_usd": { "type": ["number", "null"], "minimum": 0 },
         "error_code": { "type": ["string", "null"] },

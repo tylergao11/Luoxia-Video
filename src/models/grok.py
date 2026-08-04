@@ -109,6 +109,7 @@ class GrokVideoModel(VideoGenModel):
         # Stash vendor ids on instance for runner to persist into timeline.video.*
         self.last_request_id = request_id
         self.last_source_url = source_url
+        self.last_mode = mode
         self.last_has_audio_track = True
         self.last_audio_stripped = True
         self.last_moderation_passed = bool(video_meta.get("moderation_passed", True))
@@ -119,7 +120,7 @@ class GrokVideoModel(VideoGenModel):
 
     def _headers(self) -> Dict[str, str]:
         if not self.api_key:
-            token, kind, base = _resolve_xai_token()
+            token, kind, base = resolve_xai_token("video")
             self.api_key = token
             self._auth_kind = kind
             if base:
@@ -231,8 +232,12 @@ class GrokVideoModel(VideoGenModel):
         return path
 
 
-def _resolve_xai_token() -> Tuple[str, Optional[str], Optional[str]]:
-    """Return (token, kind, base_url) via pluggable auth entry layer."""
+def resolve_xai_token(purpose: str = "generation") -> Tuple[str, Optional[str], Optional[str]]:
+    """Return (token, kind, base_url) via pluggable auth entry layer.
+
+    Shared by every xAI surface — video, images, TTS — so session login, api_key mode and
+    offline all behave identically no matter which one the pipeline reaches first.
+    """
     from src.auth.config import load_auth_config
     from src.auth.errors import AuthError, LoginRequiredError
     from src.auth.resolver import resolve_credential
@@ -254,7 +259,8 @@ def _resolve_xai_token() -> Tuple[str, Optional[str], Optional[str]]:
 
         if cfg.mode == "offline":
             raise RuntimeError(
-                "Auth mode is offline — cloud video disabled (use still-hold)."
+                f"Auth mode is offline — cloud {purpose} disabled. "
+                "Log in or switch to api_key mode."
             )
         if cfg.mode == "api_key":
             if not env_key:
@@ -264,7 +270,7 @@ def _resolve_xai_token() -> Tuple[str, Optional[str], Optional[str]]:
             return env_key, "api_key", None
         # session mode
         try:
-            resolved = resolve_credential(config=cfg, purpose="video")
+            resolved = resolve_credential(config=cfg, purpose=purpose)
             base = resolved.credential.base_url
             return resolved.credential.token, resolved.credential.kind, base
         except LoginRequiredError:
@@ -291,7 +297,13 @@ class GrokGenerationError(RuntimeError):
 
 
 def _coerce_image_url(image_url: Optional[str]) -> Optional[str]:
-    """Accept http(s)/data URLs as-is; encode local files as data URIs for xAI."""
+    """Accept http(s)/data URLs as-is; encode local files as data URIs for xAI.
+
+    A shot asking for i2v must get i2v. Falling back to t2v when the still looks
+    inconvenient loses the locked faces and the framing the storyboard chose, and the run
+    still reports success — so an unusable still is an error, and any payload limit is the
+    API's to enforce and report rather than ours to guess at.
+    """
     if not image_url:
         return None
     s = str(image_url).strip()
@@ -299,13 +311,7 @@ def _coerce_image_url(image_url: Optional[str]) -> Optional[str]:
         return s
     path = Path(s)
     if not path.is_file():
-        logger.warning("image path not found, falling back to t2v: %s", s)
-        return None
+        raise FileNotFoundError(f"i2v still not found, refusing to fall back to t2v: {s}")
     mime = mimetypes.guess_type(path.name)[0] or "image/png"
-    raw = path.read_bytes()
-    # Keep payloads modest; oversized stills fall back to t2v.
-    if len(raw) > 6 * 1024 * 1024:
-        logger.warning("still larger than 6MB, falling back to t2v: %s", path)
-        return None
-    b64 = base64.b64encode(raw).decode("ascii")
+    b64 = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:{mime};base64,{b64}"

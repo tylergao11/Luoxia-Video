@@ -104,6 +104,7 @@ def _render_one(timeline: Dict[str, Any], shot: Dict[str, Any], root: Path) -> N
                 "has_audio_track": bool(getattr(adapter, "last_has_audio_track", False)),
                 "audio_stripped": bool(getattr(adapter, "last_audio_stripped", False)),
                 "moderation_passed": getattr(adapter, "last_moderation_passed", True),
+                "mode": getattr(adapter, "last_mode", None),
                 "cost_usd": getattr(adapter, "last_cost_usd", None),
                 "error": None,
                 "error_code": None,

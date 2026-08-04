@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from src.luoxia.media.geometry import frame_size  # re-exported: callers ask subtitles for it
+
 DEFAULT_STYLE: Dict[str, Any] = {
     "font_name": "Source Han Sans SC",
     "font_size_px": None,
@@ -28,16 +30,6 @@ MARGIN_H_RATIO = 0.08
 
 # CJK glyphs advance about one em; leave headroom for the outline.
 GLYPH_ADVANCE_RATIO = 1.05
-
-_ASPECT_WH = {
-    "9:16": (9, 16),
-    "16:9": (16, 9),
-    "1:1": (1, 1),
-    "4:3": (4, 3),
-    "3:4": (3, 4),
-    "3:2": (3, 2),
-    "2:3": (2, 3),
-}
 
 # ASS v4+ alignment is numpad-style: 2 = bottom centre, 5 = middle, 8 = top.
 _ALIGNMENT = {"bottom": 2, "middle": 5, "top": 8}
@@ -65,23 +57,6 @@ class SubtitleCue(tuple):
     @property
     def text(self) -> str:
         return self[2]
-
-
-def frame_size(timeline: Dict[str, Any]) -> Tuple[int, int]:
-    """(width, height) implied by global.aspect_ratio + resolution.
-
-    Only a fallback. Subtitle geometry should follow the probed frame, because a
-    provider can hand back a clip that ignores the requested size.
-    """
-    g = timeline.get("global") or {}
-    label = str(g.get("resolution") or "720p")
-    try:
-        base = int(label.rstrip("pP") or 720)
-    except ValueError:
-        base = 720
-    w, h = _ASPECT_WH.get(str(g.get("aspect_ratio") or "16:9"), (16, 9))
-    scale = base / min(w, h)
-    return int(round(w * scale)), int(round(h * scale))
 
 
 def resolve_style(timeline: Dict[str, Any]) -> Dict[str, Any]:

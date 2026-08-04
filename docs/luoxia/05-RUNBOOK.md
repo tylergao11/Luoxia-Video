@@ -2,12 +2,23 @@
 
 接上 API Key 后，用一条命令从小说文本到成片。
 
-## 需要的 Key
+## 需要的凭据
 
 | 变量 | 用途 | 是否必须 |
 | --- | --- | --- |
 | `DASHSCOPE_API_KEY` | LLM 切片打分、TTS、静帧（Wanx） | 必须 |
-| `XAI_API_KEY` | Grok 视频 | 想出动态视频时必须；没有则自动走静帧定格 |
+| `XAI_API_KEY` | Grok 视频，**仅 api_key 模式需要** | 走订阅池登录时不需要，见下 |
+
+**视频凭据有两条路**，管线问的是鉴权层（`src/auth`）而不是环境变量：
+
+- `session` 模式（默认）：登录订阅池，`XAI_API_KEY` 留空甚至注释掉都没关系
+- `api_key` 模式：`LUOXIA_AUTH_MODE=api_key` + 设置 `XAI_API_KEY`
+
+查当前状态：`python -c "from src.auth.resolver import status; print(status())"`。
+
+凭据取不到时管线**直接报错停下**，不会降级出片。曾经的行为是缺 `XAI_API_KEY` 就悄悄把静帧定住几秒当成片——一个登录着订阅池的账号会被误判成"没配置"，最后拿到一段不会动的幻灯片，而 phase 照样写 `rendered`、退出码照样是 0。静帧定格模式已经删除：**没有真视频就不出片**。
+
+`.env` 由 `src/luoxia/env.py` 在 CLI / 管线入口加载。以前只有 `src/config.py` 调 `load_dotenv()`，而 luoxia 不 import 它，所以命令行跑的时候整个包看不见 `DASHSCOPE_API_KEY`——有一次因此判定"TTS 不可用"，用 ffmpeg 生成的音调冒充了整集配音。
 
 可选 LLM 切换（默认 DashScope）：
 
@@ -23,9 +34,6 @@ OPENAI_MODEL=deepseek-chat
 ```bash
 # 建议先把样例拷出去改
 python -m src.luoxia --output-root output/luoxia_runs run contracts/examples/novel.sample.txt --work-id demo --budget 5
-
-# 没有 XAI 时自动 still-hold（静帧+音频合成）；也可强制：
-python -m src.luoxia run your_novel.txt --still-hold
 
 # 第一次跑真 Key 时建议加严格门：程序编台词就停，别把钱花在编出来的内容上
 python -m src.luoxia run your_novel.txt --max-repair-severity medium
@@ -55,7 +63,7 @@ python -m src.luoxia beats-bridge output/demo/beats.json ep01
 python -m src.luoxia solve ep01
 python -m src.luoxia stills ep01
 python -m src.luoxia freeze ep01
-python -m src.luoxia render ep01          # 或 still-hold 路径走 run --still-hold
+python -m src.luoxia render ep01
 python -m src.luoxia compose ep01
 ```
 

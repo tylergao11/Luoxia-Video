@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+from src.audio.xai_tts import voices_for_gender
 from src.luoxia.beats import repairs as repair_log
 from src.luoxia.beats.prompts import (
     ANALYZE_CARRYOVER_TEMPLATE,
@@ -43,8 +44,14 @@ DEFAULT_GLOBAL = {
     "target_episode_duration_s": 90,
 }
 
-DEFAULT_FEMALE_VOICES = ("longxiaochun", "longyue", "longwan", "longyuan")
-DEFAULT_MALE_VOICES = ("longshu", "longhao", "longtian", "longcheng", "longze")
+DEFAULT_FEMALE_VOICES = tuple(voices_for_gender("female"))
+DEFAULT_MALE_VOICES = tuple(voices_for_gender("male"))
+# The model picks from the same registry the TTS adapter validates against, so a voice can
+# never be accepted here and then silently recast as the API default at synthesis time.
+VOICE_CATALOG = (
+    f"女性角色：{', '.join(DEFAULT_FEMALE_VOICES)}\n"
+    f"男性角色：{', '.join(DEFAULT_MALE_VOICES)}"
+)
 OPENING_TYPES = frozenset(DEFAULT_GLOBAL["opening_conflict_types"])
 VALID_TYPES = frozenset(BEAT_TYPES)
 SHOT_SIZES = {"extreme_close_up", "close_up", "medium", "full", "wide", "insert"}
@@ -184,6 +191,7 @@ def _analyze_chunks(
             para_hi=chunk[-1].index,
             numbered=render_numbered(chunk),
             carryover=carryover,
+            voice_catalog=VOICE_CATALOG,
         )
         try:
             data = chat_json(
@@ -388,7 +396,7 @@ def _normalize_cast(cast: List[Dict[str, Any]], *, doc: Dict[str, Any]) -> List[
             {
                 "character_id": "narrator",
                 "display_name": "旁白",
-                "voice_id": "longshu",
+                "voice_id": DEFAULT_MALE_VOICES[0],
                 "role": "narrator",
                 "appearance": None,
                 "aliases": [],

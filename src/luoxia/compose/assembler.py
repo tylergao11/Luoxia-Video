@@ -12,7 +12,8 @@ from src.luoxia.compose.subtitles import (
     style_for_frame,
     write_ass,
 )
-from src.luoxia.media.ffprobe import measure_media_duration_s, measure_video_size
+from src.luoxia.media.ffprobe import measure_media_duration_s
+from src.luoxia.media.geometry import frame_size
 from src.luoxia.timeline.freeze import assert_writable_for_render
 from src.luoxia.timeline.transitions import (
     SegmentPlan,
@@ -21,6 +22,9 @@ from src.luoxia.timeline.transitions import (
     total_duration_s,
 )
 from src.utils.system_check import get_ffmpeg_path
+
+# Roughly one frame at 24-25fps. Below this a clip is short only by rounding.
+SHORT_CLIP_TOLERANCE_S = 0.04
 
 
 def assemble_episode(
@@ -49,9 +53,15 @@ def assemble_episode(
 
     style = resolve_style(timeline)
     plans = plan_segments(timeline)
-    fps = int((timeline.get("global") or {}).get("fps") or 25)
+    fps = int((timeline.get("global") or {}).get("fps") or 24)
+    # Providers round sizes their own way — asking grok for 1080p returns 1920x1088 — and
+    # the concat demuxer copies streams, so segments that disagree on size or fps produce a
+    # broken master. Normalise every segment to the size the contract declares.
+    frame = frame_size(timeline)
 
-    segments: List[Path] = [_build_segment(ffmpeg, plan, work, style=style) for plan in plans]
+    segments: List[Path] = [
+        _build_segment(ffmpeg, plan, work, style=style, frame=frame, fps=fps) for plan in plans
+    ]
 
     if needs_filter_graph(plans):
         _join_with_transitions(ffmpeg, segments, plans, out=out, fps=fps)
@@ -134,7 +144,15 @@ def _join_with_transitions(
         raise RuntimeError(f"transition join failed: {result.stderr[-500:]}")
 
 
-def _build_segment(ffmpeg: str, plan: SegmentPlan, work: Path, *, style: Dict[str, Any]) -> Path:
+def _build_segment(
+    ffmpeg: str,
+    plan: SegmentPlan,
+    work: Path,
+    *,
+    style: Dict[str, Any],
+    frame: tuple[int, int],
+    fps: int,
+) -> Path:
     shot = plan.shot
     shot_id = shot["shot_id"]
     timing = shot["timing"]
@@ -151,16 +169,24 @@ def _build_segment(ffmpeg: str, plan: SegmentPlan, work: Path, *, style: Dict[st
     head = float(trim.get("head_s") or 0)
     seg = work / f"{shot_id}.seg.mp4"
 
-    vf_parts: List[str] = []
-    # Extra material for an outgoing dissolve comes from the frames trim would drop;
-    # if the provider clip is too short, hold the last frame instead of shortening.
-    if plan.extend_s > 0:
-        available = max(0.0, measure_media_duration_s(src) - head)
-        shortfall = seg_len - available
-        if shortfall > 1e-3:
-            vf_parts.append(f"tpad=stop_mode=clone:stop_duration={_fmt(shortfall)}")
+    width, height = frame
+    vf_parts: List[str] = [
+        f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos",
+        f"crop={width}:{height}",
+        f"fps={fps}",
+        "setsar=1",
+    ]
+    # Providers do not honour the requested duration reliably — a 10s request can come
+    # back as a 6s clip. Without this the segment silently ends early, the episode drifts
+    # off the master clock and the tail of the line plays over the next shot. Hold the
+    # last frame instead, and record it so a short clip is visible rather than inferred.
+    available = max(0.0, measure_media_duration_s(src) - head)
+    shortfall = seg_len - available
+    if shortfall > SHORT_CLIP_TOLERANCE_S:
+        vf_parts.append(f"tpad=stop_mode=clone:stop_duration={_fmt(shortfall)}")
+        _record_short_clip(shot, requested=seg_len, available=available)
 
-    ass = _write_shot_ass(shot, work, style=style, source=src)
+    ass = _write_shot_ass(shot, work, style=style, frame=frame)
     if ass is not None:
         escaped = ass.resolve().as_posix().replace(":", "\\:")
         vf_parts.append(f"ass='{escaped}'")
@@ -183,6 +209,11 @@ def _build_segment(ffmpeg: str, plan: SegmentPlan, work: Path, *, style: Dict[st
     # concat demuxer sees a uniform stream layout.
     audio_path = audio.get("local_path")
     has_audio_file = bool(audio_path) and Path(audio_path).is_file()
+    if not has_audio_file and _expects_speech(shot):
+        raise FileNotFoundError(
+            f"{shot_id}: shot has a line but no audio file at {audio_path!r}; "
+            "refusing to compose it as silence"
+        )
     if has_audio_file:
         cmd += ["-i", str(audio_path)]
         delay_ms = int(round(float(timing.get("lead_in_s") or 0) * 1000))
@@ -209,18 +240,50 @@ def _build_segment(ffmpeg: str, plan: SegmentPlan, work: Path, *, style: Dict[st
     return seg
 
 
+def _expects_speech(shot: Dict[str, Any]) -> bool:
+    """Whether this shot is supposed to carry a spoken line.
+
+    Silent shots legitimately get a generated silent track so concat sees a uniform
+    layout; a dialogue shot must not, or the line just vanishes from the episode.
+    """
+    dialogue = shot.get("dialogue") or {}
+    return bool(dialogue.get("text")) or shot.get("timing_driver") == "audio"
+
+
+def _record_short_clip(shot: Dict[str, Any], *, requested: float, available: float) -> None:
+    """Note on the shot that its clip was padded, so the shortfall is auditable."""
+    video = shot.setdefault("video", {})
+    video["padded_from_s"] = round(available, 3)
+    video["padded_to_s"] = round(requested, 3)
+
+
+def short_clips(timeline: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Shots whose provider clip was shorter than the timeline required."""
+    return [
+        {
+            "shot_id": s.get("shot_id"),
+            "delivered_s": (s.get("video") or {}).get("padded_from_s"),
+            "required_s": (s.get("video") or {}).get("padded_to_s"),
+        }
+        for s in timeline.get("shots") or []
+        if (s.get("video") or {}).get("padded_from_s") is not None
+    ]
+
+
 def _write_shot_ass(
     shot: Dict[str, Any],
     work: Path,
     *,
     style: Dict[str, Any],
-    source: Path,
+    frame: tuple[int, int],
 ) -> Optional[Path]:
+    """Subtitle geometry follows the frame the segment is normalised to, so PlayRes matches
+    the pixels libass draws into and margins land where the style asked."""
     window = shot_subtitle_window(shot)
     if window is None:
         return None
 
-    width, height = measure_video_size(source)
+    width, height = frame
     frame_style = style_for_frame(style, width, height)
     start, end = window
     cues = build_cues(

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from src.luoxia.stills.characters import reference_map, refs_for_shot
-from src.luoxia.stills.sizing import size_for_aspect
+from src.luoxia.media.ffprobe import measure_video_size
+from src.luoxia.media.geometry import frame_size
+from src.luoxia.stills.characters import named_refs_for_shot, reference_map
+from src.utils.system_check import get_ffmpeg_path
 
 GenerateFn = Callable[..., str]
-# generate(prompt, output_path, *, size, negative_prompt, ref_image_paths) -> local_path
+# generate(prompt, output_path, *, aspect_ratio, negative_prompt, ref_images) -> local_path
 
 
 def render_timeline_stills(
@@ -25,7 +28,7 @@ def render_timeline_stills(
     root = Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
     aspect = (timeline.get("global") or {}).get("aspect_ratio") or "16:9"
-    size = size_for_aspect(aspect)
+    width, height = frame_size(timeline)
     gen = generate or _default_generate()
     refs = reference_map(timeline)
 
@@ -39,21 +42,22 @@ def render_timeline_stills(
         if not prompt:
             prompt = (shot.get("video") or {}).get("request", {}).get("prompt") or shot["shot_id"]
             still["prompt"] = prompt
-        shot_refs = refs_for_shot(shot, refs)
+        shot_refs = named_refs_for_shot(shot, timeline, refs)
         out = root / "stills" / f"{shot['shot_id']}.png"
         out.parent.mkdir(parents=True, exist_ok=True)
         still["status"] = "generating"
         still["aspect_ratio"] = aspect
         if shot_refs:
-            still["reference_image_paths"] = shot_refs
+            still["reference_image_paths"] = [r["path"] for r in shot_refs]
         try:
             path = gen(
                 prompt,
                 str(out),
-                size=size,
+                aspect_ratio=aspect,
                 negative_prompt=still.get("negative_prompt"),
-                ref_image_paths=shot_refs or None,
+                ref_images=shot_refs or None,
             )
+            path = _fit_to_frame(path, width, height)
             still.update(
                 {
                     "status": "ready",
@@ -82,28 +86,60 @@ def render_timeline_stills(
     return timeline
 
 
-def _default_generate() -> GenerateFn:
-    from src.models.image import WanxImageModel
+def _fit_to_frame(path: str, width: int, height: int) -> str:
+    """Resize a still to exactly the frame it will be the first frame of.
 
-    # i2i_model_name is what the upstream model switches to once references are present.
-    model = WanxImageModel(
-        {"params": {"model_name": "wan2.7-image-pro", "i2i_model_name": "wan2.7-image"}}
+    Providers round aspect ratios their own way, so cover-and-crop rather than stretch.
+    A still already at the right size is left alone.
+    """
+    src = Path(path)
+    if measure_video_size(src) == (width, height):
+        return path
+
+    ffmpeg = get_ffmpeg_path()
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg not found; cannot fit still to frame")
+    out = src.with_name(f"{src.stem}_frame.jpg")
+    result = subprocess.run(
+        [
+            ffmpeg, "-y", "-v", "error", "-i", str(src),
+            "-vf",
+            f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"crop={width}:{height}",
+            # mjpeg cannot take an alpha channel, which a provider PNG may carry.
+            "-pix_fmt", "yuvj420p",
+            "-q:v", "2", str(out),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f"fitting still to {width}x{height} failed: {result.stderr[-500:]}")
+    return str(out)
+
+
+def _default_generate() -> GenerateFn:
+    from src.models.xai_image import XaiImageModel
+
+    # Images cost $0.02 whatever the resolution, and 1k tops out at 1280x720 — below a
+    # 1080p frame. Ask for 2k and let the runner resize down to the exact frame.
+    model = XaiImageModel({"params": {"resolution": "2k"}})
 
     def generate(
         prompt: str,
         output_path: str,
         *,
-        size: str,
+        aspect_ratio: str,
         negative_prompt: Optional[str] = None,
-        ref_image_paths: Optional[list] = None,
+        ref_images: Optional[list] = None,
     ) -> str:
         path, _elapsed = model.generate(
             prompt,
             output_path,
-            size=size,
+            aspect_ratio=aspect_ratio,
             negative_prompt=negative_prompt,
-            ref_image_paths=ref_image_paths,
+            ref_images=ref_images,
         )
         return path
 

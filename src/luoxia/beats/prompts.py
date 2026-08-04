@@ -62,8 +62,7 @@ ANALYZE_USER_TEMPLATE = """作品 work_id={work_id}
 标题={title}
 
 可选 voice_id（必须从中选）：
-女性角色：longxiaochun, longyue, longwan, longyuan
-男性角色：longshu, longhao, longtian, longcheng, longze
+{voice_catalog}
 
 已编号的原文段落（本批为第 {chunk_no}/{chunk_total} 批，段落号 {para_lo}–{para_hi}）：
 -----
@@ -77,7 +76,7 @@ ANALYZE_USER_TEMPLATE = """作品 work_id={work_id}
     {{
       "character_id": "lin_wan",
       "display_name": "林晚",
-      "voice_id": "longxiaochun",
+      "voice_id": "luna",
       "role": "protagonist",
       "appearance": "二十五岁女性，黑色长发挽起，旧灰呢外套，眼神清冷。只写长期固定外形，不写表情动作。",
       "aliases": ["林家大小姐"]

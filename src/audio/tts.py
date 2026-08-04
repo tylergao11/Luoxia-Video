@@ -220,7 +220,8 @@ class TTSProcessor:
         # Pass instructions only if voice supports it (v3-flash / v3.5-*).
         # SDK will reject unknown kwargs, so gate explicitly.
         if instructions and self._voice_supports_instruction(voice):
-            synth_kwargs['instructions'] = instructions
+            # dashscope SpeechSynthesizer uses singular `instruction`
+            synth_kwargs['instruction'] = instructions
 
         logger.info(
             f"CosyVoice synth: model={model}, voice='{voice}' "
