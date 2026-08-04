@@ -79,10 +79,13 @@ class XaiImageModel:
     ) -> Tuple[str, float]:
         """Render one still; return (written_path, elapsed_s).
 
-        `ref_images` are locked character portraits as `{"display_name", "path"}`, in the
-        order they appear on screen. The written path can differ from `output_path` in
-        extension: the API chooses the encoding, and a JPEG saved as `.png` would later be
-        handed to the video API with the wrong MIME type.
+        `ref_images` are ordered sources as `{"display_name", "path", "role"?}`:
+          - role ``identity`` (default): lock that character's face/hair/costume
+          - role ``style``: copy render language only (Hongguo AI-manhua medium), not identity
+
+        The written path can differ from `output_path` in extension: the API chooses the
+        encoding, and a JPEG saved as `.png` would later be handed to the video API with
+        the wrong MIME type.
         """
         started = time.time()
         if aspect_ratio not in ASPECT_RATIOS:
@@ -154,6 +157,14 @@ class XaiImageModel:
         return items[0], data.get("usage") or {}
 
 
+def _ref_role(ref: Dict[str, Any]) -> str:
+    """Normalize reference role. Default is identity (backward compatible)."""
+    role = (ref.get("role") or ref.get("ref_role") or "identity").strip().lower()
+    if role in {"style", "style_ref", "medium", "look"}:
+        return "style"
+    return "identity"
+
+
 def compose_prompt(
     prompt: str,
     *,
@@ -165,26 +176,71 @@ def compose_prompt(
     Both are prompt-level here because the API has neither a negative-prompt parameter nor
     a way to name a source image — with several references it addresses them positionally
     as <IMAGE_0>, <IMAGE_1>, so the prompt has to say who is who or faces get swapped.
+
+    Critical role split (IP-Adapter-style practice, text-instructed for xAI edits):
+      - style: teach 红果 AI 漫 render language (face polish, porcelain skin, volume light)
+        WITHOUT locking the ref character's identity, hair color, costume, or UI chrome
+      - identity: lock that character's face / hair / costume across shots
     """
     parts: List[str] = []
     refs = list(ref_images or [])
-    if len(refs) == 1:
-        parts.append(
-            f"参考图是{refs[0].get('display_name') or '画面人物'}的固定长相，"
-            "严格保持其五官、发型与服装特征。"
-        )
-    elif refs:
-        who = "，".join(
-            f"<IMAGE_{i}> 是{r.get('display_name') or f'人物{i + 1}'}"
-            for i, r in enumerate(refs)
-        )
-        parts.append(f"{who}。严格保持每个人各自的五官、发型与服装特征，不要互相串脸。")
+    if refs:
+        parts.append(_compose_ref_instructions(refs))
 
     parts.append(prompt.strip())
     negative = (negative_prompt or "").strip()
     if negative:
         parts.append(f"避免出现：{negative}。")
     return "\n".join(p for p in parts if p)
+
+
+def _compose_ref_instructions(refs: Sequence[Dict[str, Any]]) -> str:
+    """Build positional role instructions for style vs identity references."""
+    multi = len(refs) > 1
+    chunks: List[str] = []
+    style_idxs: List[int] = []
+    identity_idxs: List[int] = []
+
+    for i, ref in enumerate(refs):
+        role = _ref_role(ref)
+        label = (ref.get("display_name") or "").strip() or (f"参考{i + 1}" if multi else "参考图")
+        tag = f"<IMAGE_{i}>" if multi else "参考图"
+        if role == "style":
+            style_idxs.append(i)
+            # Keep "<IMAGE_n> 是…" prefix so multi-ref addressing stays explicit.
+            chunks.append(
+                f"{tag} 是{label}（风格参考，只学介质）：尽量做到与参考几乎同一套渲染语言——"
+                "虚幻引擎级材质密度、锋利骨相与修长脸、窄长眼型与冷高光、瓷光无毛孔皮肤、"
+                "发丝丝缕与布料纤维高细节、戏剧体积光与暗部层次、红果封面级精修压迫感。"
+                "输出必须是成年向精致3D漫剧角色，不要幼态Q版大圆眼，不要真人写真。"
+                "禁止复制该图人物的身份五官、银发白发、红瞳、服装图案、配饰、字幕、UI或备案号。"
+            )
+        else:
+            identity_idxs.append(i)
+            # Identity default keeps historical phrasing for single-ref callers/tests.
+            if multi:
+                chunks.append(
+                    f"{tag} 是{label}（角色身份参考）：严格保持其五官、发型与服装特征，不要串脸。"
+                )
+            else:
+                chunks.append(
+                    f"参考图是{label}的固定长相，严格保持其五官、发型与服装特征。"
+                )
+
+    if style_idxs and not identity_idxs:
+        chunks.append(
+            "本请求仅有风格参考：材质/脸模锋利度/瓷光/戏剧光必须与风格参考几乎一致（同一风格族），"
+            "允许换角色身份与服装；禁止幼态Q版、偶像写真、毛孔写实、2D赛璐璐。"
+        )
+    elif style_idxs and identity_idxs:
+        chunks.append(
+            "风格参考只决定介质与光妆；角色身份参考只决定是谁。"
+            "禁止把风格参考里的人物当成剧中角色。"
+        )
+    elif multi and identity_idxs:
+        chunks.append("严格保持每个人各自的五官、发型与服装特征，不要互相串脸。")
+
+    return "\n".join(chunks)
 
 
 def _data_uri(path: str | Path) -> str:

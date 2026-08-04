@@ -76,9 +76,10 @@ _STYLE_KEYWORDS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("decrease-intensity", ("渐弱", "平息", "声音低下去")),
     ("higher-pitch", ("尖锐", "拔高", "兴奋")),
     ("lower-pitch", ("低沉", "沉声", "压抑")),
-    ("slow", ("缓慢", "迟疑", "犹豫", "一字一句")),
+    # "一字一句" is often angry bite-diction, not slow reading — map it under emphasis.
+    ("slow", ("缓慢", "迟疑", "犹豫", "慢条斯理", "拉长音")),
     ("fast", ("急促", "焦急", "慌乱", "飞快")),
-    ("emphasis", ("强调", "加重", "咬字", "咬死", "咬牙", "字字", "恨意", "决绝")),
+    ("emphasis", ("强调", "加重", "咬字", "咬死", "咬牙", "字字", "一字一句", "恨意", "决绝")),
     ("soft", ("温柔", "柔和", "轻柔", "平静", "淡淡", "很轻", "克制")),
 )
 _INLINE_KEYWORDS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
@@ -104,16 +105,18 @@ def apply_emotion(text: str, emotion: Optional[str]) -> Tuple[str, List[str]]:
 
     applied: List[str] = []
     body = text
+    # Inline events: at most one prefix cue (pause/sigh/…) so delivery stays clean.
     for tag, keywords in _INLINE_KEYWORDS:
         if any(k in note for k in keywords):
             body = f"[{tag}]{body}"
             applied.append(f"[{tag}]")
             break
+    # Style wrappers: stack all matching tags (e.g. loud + emphasis + build-intensity)
+    # so short-drama lines can be both angry and bitten, not only the first keyword hit.
     for tag, keywords in _STYLE_KEYWORDS:
         if any(k in note for k in keywords):
             body = f"<{tag}>{body}</{tag}>"
             applied.append(f"<{tag}>")
-            break
     return body, applied
 
 
