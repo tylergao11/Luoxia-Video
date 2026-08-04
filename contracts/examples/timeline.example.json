@@ -1,0 +1,328 @@
+{
+  "schema_version": "1.0.0",
+  "project_id": "luoxia_demo",
+  "episode_id": "ep01",
+  "title": "第一集 · 重逢",
+  "phase": "frozen",
+  "frozen_at": "2026-08-04T11:20:00+08:00",
+  "timeline_hash": "sha256:0f2b8c1d9a4e7f36b5c2d8e1a9047f3c6b1d5e8a2f4c7091d3b6e9a2c5f8014b",
+  "global": {
+    "fps": 25,
+    "aspect_ratio": "9:16",
+    "resolution": "720p",
+    "lead_in_s": 0.3,
+    "tail_out_s": 0.5,
+    "min_speed_ratio": 0.92,
+    "max_speed_ratio": 1.1,
+    "default_action_duration_s": 4
+  },
+  "cast": [
+    {
+      "character_id": "lin_wan",
+      "display_name": "林晚",
+      "voice_id": "longxiaochun",
+      "tts_provider": "dashscope.cosyvoice",
+      "reference_image_asset_id": "asset_char_linwan_v3",
+      "voice_instructions": "清冷、克制，语速偏慢"
+    },
+    {
+      "character_id": "shen_ce",
+      "display_name": "沈策",
+      "voice_id": "longshu",
+      "tts_provider": "dashscope.cosyvoice",
+      "reference_image_asset_id": "asset_char_shence_v2",
+      "voice_instructions": "低沉、压抑"
+    }
+  ],
+  "shots": [
+    {
+      "shot_id": "ep01_s001",
+      "index": 0,
+      "type": "transition",
+      "timing_driver": "rhythm",
+      "scene_id": "scene_rain_alley",
+      "shot_size": "wide",
+      "characters": [],
+      "timing": {
+        "target_duration_s": 4.0,
+        "request_duration_s": 4,
+        "slack_s": 0.0,
+        "trim": { "strategy": "tail", "head_s": 0.0, "tail_s": 0.0 },
+        "start_s": 0.0,
+        "end_s": 4.0,
+        "deviation_ratio": null,
+        "resolution_branch": "none"
+      },
+      "still": {
+        "status": "ready",
+        "asset_id": "asset_still_ep01_s001",
+        "local_path": "output/ep01/stills/ep01_s001.png",
+        "aspect_ratio": "9:16",
+        "prompt": "雨夜old街巷空镜，霓虹倒影在积水上，无人",
+        "attempts": 1
+      },
+      "video": {
+        "status": "pending",
+        "provider": "xai",
+        "model": "grok-imagine-video-1.5",
+        "request": {
+          "duration": 4,
+          "resolution": "720p",
+          "prompt": "缓慢推镜，雨滴打在积水上泛起涟漪，霓虹光轻微闪烁"
+        },
+        "has_audio_track": false,
+        "audio_stripped": false,
+        "attempts": 0,
+        "cost_usd": null
+      },
+      "lipsync": { "required": false, "reason": null, "model": null, "status": "skipped" },
+      "subtitle": { "text": null, "start_s": null, "end_s": null, "description": "空镜无字幕" }
+    },
+    {
+      "shot_id": "ep01_s002",
+      "index": 1,
+      "type": "dialogue",
+      "timing_driver": "audio",
+      "scene_id": "scene_rain_alley",
+      "shot_size": "close_up",
+      "characters": ["lin_wan"],
+      "dialogue": {
+        "character_id": "lin_wan",
+        "text": "你怎么在这？",
+        "source_text": "你怎么会在这里？",
+        "rewrite_count": 0,
+        "emotion": "错愕"
+      },
+      "audio": {
+        "status": "rendered",
+        "provider": "dashscope.cosyvoice",
+        "voice_id": "longxiaochun",
+        "speed": 1.0,
+        "measured_duration_s": 1.42,
+        "local_path": "output/ep01/audio/ep01_s002.wav",
+        "sha256": "sha256:8a1c4f7e2b9d0653a8f1c4e7b2d9068a3f1c5e8b2d9047a6f3c1e5b8d2a90476",
+        "error": null
+      },
+      "timing": {
+        "lead_in_s": 0.3,
+        "tail_out_s": 0.5,
+        "target_duration_s": 2.22,
+        "request_duration_s": 3,
+        "slack_s": 0.78,
+        "trim": { "strategy": "tail", "head_s": 0.0, "tail_s": 0.78 },
+        "start_s": 4.0,
+        "end_s": 6.22,
+        "deviation_ratio": 0.0,
+        "resolution_branch": "none"
+      },
+      "still": {
+        "status": "ready",
+        "asset_id": "asset_still_ep01_s002",
+        "local_path": "output/ep01/stills/ep01_s002.png",
+        "aspect_ratio": "9:16",
+        "prompt": "林晚特写，雨水沾湿额发，瞳孔微缩",
+        "attempts": 2
+      },
+      "video": {
+        "status": "pending",
+        "provider": "xai",
+        "model": "grok-imagine-video-1.5",
+        "request": {
+          "duration": 3,
+          "resolution": "720p",
+          "prompt": "极轻微的呼吸起伏，睫毛颤动，镜头几乎静止"
+        },
+        "has_audio_track": false,
+        "audio_stripped": false,
+        "attempts": 0,
+        "cost_usd": null
+      },
+      "lipsync": {
+        "required": false,
+        "reason": "特写但时长 2.22s 未超过 3s 阈值，走句段级对齐即可",
+        "model": null,
+        "status": "skipped"
+      },
+      "subtitle": { "text": "你怎么在这？", "start_s": 4.3, "end_s": 5.72, "description": null }
+    },
+    {
+      "shot_id": "ep01_s003",
+      "index": 2,
+      "type": "dialogue",
+      "timing_driver": "audio",
+      "scene_id": "scene_rain_alley",
+      "shot_size": "medium",
+      "characters": ["shen_ce"],
+      "dialogue": {
+        "character_id": "shen_ce",
+        "text": "我等了三年。每一天都在想，如果那天我没有走，现在会不会不一样。",
+        "source_text": "我在这里等了整整三年。这三年里的每一天，我都在反复地想同一个问题，如果那天晚上我没有转身离开，那么我们现在会不会是完全不一样的结局。",
+        "rewrite_count": 1,
+        "emotion": "隐忍"
+      },
+      "audio": {
+        "status": "rendered",
+        "provider": "dashscope.cosyvoice",
+        "voice_id": "longshu",
+        "speed": 1.05,
+        "measured_duration_s": 8.6,
+        "local_path": "output/ep01/audio/ep01_s003.wav",
+        "sha256": "sha256:3d7f0a2c8e1b5946d0a3f7c2e8b1594d7a0c3f8e2b6591d4a7c0f3e8b2d59614",
+        "error": null
+      },
+      "timing": {
+        "lead_in_s": 0.3,
+        "tail_out_s": 0.5,
+        "target_duration_s": 9.4,
+        "request_duration_s": 10,
+        "slack_s": 0.6,
+        "trim": { "strategy": "tail", "head_s": 0.0, "tail_s": 0.6 },
+        "start_s": 6.22,
+        "end_s": 15.62,
+        "deviation_ratio": 0.28,
+        "resolution_branch": "llm_rewrite"
+      },
+      "still": {
+        "status": "ready",
+        "asset_id": "asset_still_ep01_s003",
+        "local_path": "output/ep01/stills/ep01_s003.png",
+        "aspect_ratio": "9:16",
+        "prompt": "沈策中景，背对霓虹，雨伞垂在身侧",
+        "attempts": 1
+      },
+      "video": {
+        "status": "pending",
+        "provider": "xai",
+        "model": "grok-imagine-video-1.5",
+        "request": {
+          "duration": 10,
+          "resolution": "720p",
+          "prompt": "极缓慢的侧向平移，雨丝持续下落，人物几乎静止只有肩膀微动"
+        },
+        "has_audio_track": false,
+        "audio_stripped": false,
+        "attempts": 0,
+        "cost_usd": null
+      },
+      "lipsync": {
+        "required": false,
+        "reason": "中景，嘴部占比小，不做逐帧口型",
+        "model": null,
+        "status": "skipped"
+      },
+      "subtitle": {
+        "text": "我等了三年。每一天都在想，如果那天我没有走，现在会不会不一样。",
+        "start_s": 6.52,
+        "end_s": 15.12,
+        "description": null
+      }
+    },
+    {
+      "shot_id": "ep01_s004",
+      "index": 3,
+      "type": "dialogue",
+      "timing_driver": "pinned",
+      "scene_id": "scene_rain_alley",
+      "shot_size": "close_up",
+      "characters": ["lin_wan"],
+      "dialogue": {
+        "character_id": "lin_wan",
+        "text": "那你为什么现在才回来。",
+        "source_text": "那你为什么偏偏要等到现在才肯回来。",
+        "rewrite_count": 1,
+        "emotion": "崩溃边缘"
+      },
+      "audio": {
+        "status": "rendered",
+        "provider": "dashscope.cosyvoice",
+        "voice_id": "longxiaochun",
+        "speed": 1.08,
+        "measured_duration_s": 4.2,
+        "local_path": "output/ep01/audio/ep01_s004.wav",
+        "sha256": "sha256:b5e8213c7f0a94d6b2e5813c7f0a4d96b5e2813c7f0a94d6b2e5813c7f0a49d6",
+        "error": null
+      },
+      "timing": {
+        "lead_in_s": 0.3,
+        "tail_out_s": 0.5,
+        "target_duration_s": 5.0,
+        "request_duration_s": 5,
+        "pinned_duration_s": 5.0,
+        "slack_s": 0.0,
+        "trim": { "strategy": "tail", "head_s": 0.0, "tail_s": 0.0 },
+        "start_s": 15.62,
+        "end_s": 20.62,
+        "deviation_ratio": 0.19,
+        "resolution_branch": "pinned_fit"
+      },
+      "still": {
+        "status": "ready",
+        "asset_id": "asset_still_ep01_s004",
+        "local_path": "output/ep01/stills/ep01_s004.png",
+        "aspect_ratio": "9:16",
+        "prompt": "林晚特写，眼眶泛红，雨水与泪水混在一起",
+        "attempts": 7
+      },
+      "video": {
+        "status": "done",
+        "provider": "xai",
+        "model": "grok-imagine-video-1.5",
+        "request": {
+          "duration": 5,
+          "resolution": "720p",
+          "prompt": "情绪特写，嘴唇轻颤，一滴水沿脸颊滑落"
+        },
+        "request_id": "d97415a1-5796-b7ec-379f-4e6819e08fdf",
+        "source_url": "https://vidgen.x.ai/expired-temporary-url/video.mp4",
+        "local_path": "output/ep01/video/ep01_s004.mp4",
+        "fetched_at": "2026-08-04T11:18:42+08:00",
+        "has_audio_track": true,
+        "audio_stripped": true,
+        "moderation_passed": true,
+        "attempts": 3,
+        "cost_usd": 0.352,
+        "error_code": null,
+        "error": null
+      },
+      "lipsync": {
+        "required": true,
+        "reason": "特写对白且时长 5.0s 超过 3s 阈值",
+        "model": "latentsync",
+        "status": "pending",
+        "local_path": null
+      },
+      "subtitle": {
+        "text": "那你为什么现在才回来。",
+        "start_s": 15.92,
+        "end_s": 20.12,
+        "description": "这条镜头画面已钉死（抽卡 7 次才达标），台词被改写并提速至 1.08 以适配 5 秒画面"
+      }
+    }
+  ],
+  "cost": {
+    "currency": "USD",
+    "estimated_usd": 1.548,
+    "actual_usd": 0.352,
+    "budget_ceiling_usd": 5.0
+  },
+  "audit": [
+    {
+      "at": "2026-08-04T11:02:10+08:00",
+      "actor": "solver:reconcile",
+      "action": "llm_rewrite",
+      "detail": "ep01_s003 偏差率 0.28 落在 15%-35% 区间，触发约束改写，台词由 62 字压缩至 31 字，重新合成后 target 9.4s"
+    },
+    {
+      "at": "2026-08-04T11:05:33+08:00",
+      "actor": "human:tyler",
+      "action": "pin_shot",
+      "detail": "ep01_s004 画面抽卡 7 次后锁定，timing_driver 改为 pinned，由音频反向适配"
+    },
+    {
+      "at": "2026-08-04T11:20:00+08:00",
+      "actor": "agent:grok-4.5",
+      "action": "freeze",
+      "detail": "音频阶段全部完成，时间线冻结，估算成本 $1.548 低于上限 $5.00，允许进入渲染阶段"
+    }
+  ]
+}

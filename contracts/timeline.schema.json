@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://luoxia.local/contracts/timeline.schema.json",
+  "title": "Luoxia Timeline Contract",
+  "description": "落霞短剧 harness 的唯一真源（single source of truth）。音频优先：所有时长由 TTS 实测值推导，视频生成只消费本文件，不产生时长决策。",
+  "type": "object",
+  "required": ["schema_version", "episode_id", "phase", "global", "cast", "shots"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/01-TIMELINE-CONTRACT.md 记录迁移方式。"
+    },
+    "project_id": { "type": "string", "minLength": 1 },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "仅允许字母数字下划线连字符，因为它会参与文件路径拼接。"
+    },
+    "title": { "type": "string" },
+    "phase": {
+      "type": "string",
+      "enum": ["draft", "audio_locked", "frozen", "rendering", "rendered"],
+      "description": "两阶段提交的状态机。draft/audio_locked 属于廉价阶段，可自由重跑；frozen 之后任何时长字段变更都必须显式解冻并重新估算成本。"
+    },
+    "frozen_at": { "type": ["string", "null"], "format": "date-time" },
+    "timeline_hash": {
+      "type": ["string", "null"],
+      "description": "冻结时对 shots[].timing 的 sha256。渲染阶段每次写回前校验，防止时长被下游偷改。"
+    },
+    "global": {
+      "type": "object",
+      "required": ["fps", "aspect_ratio", "resolution", "lead_in_s", "tail_out_s"],
+      "additionalProperties": false,
+      "properties": {
+        "fps": { "type": "integer", "minimum": 1, "maximum": 60, "default": 25 },
+        "aspect_ratio": {
+          "type": "string",
+          "enum": ["9:16", "16:9", "1:1", "4:3", "3:4", "3:2", "2:3"],
+          "default": "9:16"
+        },
+        "resolution": { "type": "string", "enum": ["480p", "720p", "1080p"], "default": "720p" },
+        "lead_in_s": {
+          "type": "number", "minimum": 0, "maximum": 3, "default": 0.3,
+          "description": "台词开口前的画面提前量。给 I2V 一点起势时间，避免一开画就说话。"
+        },
+        "tail_out_s": {
+          "type": "number", "minimum": 0, "maximum": 5, "default": 0.5,
+          "description": "台词结束后的画面留白。呼吸感来源，也是吸收量化误差的缓冲区。"
+        },
+        "min_speed_ratio": { "type": "number", "minimum": 0.5, "maximum": 1.0, "default": 0.92 },
+        "max_speed_ratio": {
+          "type": "number", "minimum": 1.0, "maximum": 2.0, "default": 1.10,
+          "description": "语速调整上限。超过 1.10 人耳可辨，此时必须改走改写台词或拆镜头，不允许继续压缩。"
+        },
+        "default_action_duration_s": {
+          "type": "number", "minimum": 1, "maximum": 15, "default": 4,
+          "description": "无台词镜头的默认时长。这类镜头由剪辑节奏驱动，不由音频推导。"
+        }
+      }
+    },
+    "cast": {
+      "type": "array",
+      "description": "角色到音色和参考图的绑定。音色一旦锁定不得中途更换，否则同一角色前后音色不一致。",
+      "items": {
+        "type": "object",
+        "required": ["character_id", "display_name", "voice_id"],
+        "additionalProperties": false,
+        "properties": {
+          "character_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "display_name": { "type": "string" },
+          "voice_id": { "type": "string" },
+          "tts_provider": { "type": "string", "default": "dashscope.cosyvoice" },
+          "reference_image_asset_id": { "type": ["string", "null"] },
+          "voice_instructions": { "type": ["string", "null"], "description": "情绪/风格指令，若 TTS 供应商支持。" }
+        }
+      }
+    },
+    "shots": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/shot" }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "currency": { "type": "string", "const": "USD" },
+        "estimated_usd": { "type": ["number", "null"], "minimum": 0 },
+        "actual_usd": { "type": ["number", "null"], "minimum": 0 },
+        "budget_ceiling_usd": {
+          "type": ["number", "null"], "minimum": 0,
+          "description": "硬护栏。估算超过此值时 harness 必须停下等待人工确认，不得自动开跑。"
+        }
+      }
+    },
+    "audit": {
+      "type": "array",
+      "description": "追加写的审计流水。agent 每次改动时间线都要留痕，便于事后定位是谁把时长改坏了。",
+      "items": {
+        "type": "object",
+        "required": ["at", "actor", "action"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "actor": { "type": "string", "description": "如 agent:grok-4.5 / human:tyler / solver:reconcile" },
+          "action": { "type": "string" },
+          "detail": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "shot": {
+      "type": "object",
+      "required": ["shot_id", "index", "type", "timing_driver", "timing"],
+      "additionalProperties": false,
+      "properties": {
+        "shot_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+        "index": { "type": "integer", "minimum": 0 },
+        "type": {
+          "type": "string",
+          "enum": ["dialogue", "narration", "action", "transition"],
+          "description": "dialogue/narration 由音频驱动；action/transition 由节奏驱动。"
+        },
+        "timing_driver": {
+          "type": "string",
+          "enum": ["audio", "rhythm", "pinned"],
+          "description": "audio=时长由 TTS 实测推导（默认）；rhythm=无台词，按剪辑节奏给定；pinned=画面已成为不可再生资源，反向让音频适配画面。"
+        },
+        "scene_id": { "type": ["string", "null"] },
+        "shot_size": {
+          "type": ["string", "null"],
+          "enum": ["extreme_close_up", "close_up", "medium", "full", "wide", "insert", null],
+          "description": "close_up 及以上景别 + 有台词 => 触发 lipsync.required。"
+        },
+        "characters": { "type": "array", "items": { "type": "string" } },
+        "dialogue": { "$ref": "#/$defs/dialogue" },
+        "audio": { "$ref": "#/$defs/audio" },
+        "timing": { "$ref": "#/$defs/timing" },
+        "still": { "$ref": "#/$defs/still" },
+        "video": { "$ref": "#/$defs/video" },
+        "lipsync": { "$ref": "#/$defs/lipsync" },
+        "subtitle": { "$ref": "#/$defs/subtitle" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "timing_driver": { "const": "audio" } }, "required": ["timing_driver"] },
+          "then": {
+            "required": ["dialogue", "audio"],
+            "description": "音频驱动的镜头必须先有台词和已渲染的音频，否则时长无从推导。"
+          }
+        },
+        {
+          "if": { "properties": { "timing_driver": { "const": "pinned" } }, "required": ["timing_driver"] },
+          "then": { "properties": { "timing": { "required": ["pinned_duration_s"] } } }
+        }
+      ]
+    },
+    "dialogue": {
+      "type": "object",
+      "required": ["character_id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "character_id": { "type": "string" },
+        "text": { "type": "string", "minLength": 1, "description": "最终送进 TTS 的台词，可能已被 solver 改写。" },
+        "source_text": { "type": ["string", "null"], "description": "改写前的原始台词，保留用于人工比对。" },
+        "rewrite_count": { "type": "integer", "minimum": 0, "default": 0, "maximum": 3 },
+        "emotion": { "type": ["string", "null"] }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["pending", "rendering", "rendered", "failed"] },
+        "provider": { "type": ["string", "null"] },
+        "voice_id": { "type": ["string", "null"] },
+        "speed": {
+          "type": "number", "minimum": 0.5, "maximum": 2.0, "default": 1.0,
+          "description": "实际应用的语速倍率。solver 只允许在 global.min/max_speed_ratio 区间内调整。"
+        },
+        "measured_duration_s": {
+          "type": ["number", "null"], "minimum": 0,
+          "description": "实测时长，单位秒，浮点。必须来自对产出音频文件的探测（ffprobe），不得使用字数估算。"
+        },
+        "local_path": { "type": ["string", "null"] },
+        "sha256": { "type": ["string", "null"], "description": "台词+音色+语速的内容哈希，用于跳过无变更的重复合成。" },
+        "error": { "type": ["string", "null"] }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "required": ["target_duration_s", "request_duration_s", "start_s", "end_s"],
+      "additionalProperties": false,
+      "properties": {
+        "lead_in_s": { "type": "number", "minimum": 0 },
+        "tail_out_s": { "type": "number", "minimum": 0 },
+        "target_duration_s": {
+          "type": "number", "minimum": 0,
+          "description": "理想时长（浮点）= lead_in + measured_duration + tail_out。这是剪辑真正要用的长度。"
+        },
+        "request_duration_s": {
+          "type": "integer", "minimum": 1, "maximum": 15,
+          "description": "向视频供应商请求的整数秒。= clamp(ceil(target_duration_s), provider_min, provider_max)。云 API 只接受整数秒，这是量化后的值。"
+        },
+        "pinned_duration_s": { "type": ["number", "null"], "minimum": 0 },
+        "slack_s": {
+          "type": "number", "minimum": 0,
+          "description": "= request_duration_s - target_duration_s。量化产生的多余画面，由 trim 吸收。"
+        },
+        "trim": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "strategy": { "type": "string", "enum": ["tail", "head", "both", "hold_last_frame"], "default": "tail" },
+            "head_s": { "type": "number", "minimum": 0, "default": 0 },
+            "tail_s": { "type": "number", "minimum": 0, "default": 0 }
+          }
+        },
+        "start_s": { "type": "number", "minimum": 0, "description": "在整集主时间线上的入点。" },
+        "end_s": { "type": "number", "minimum": 0, "description": "在整集主时间线上的出点。end_s - start_s 必须等于 target_duration_s。" },
+        "deviation_ratio": {
+          "type": ["number", "null"],
+          "description": "solver 记录的偏差率，用于回溯该镜头走了哪条处置分支。"
+        },
+        "resolution_branch": {
+          "type": ["string", "null"],
+          "enum": ["none", "speed_adjust", "llm_rewrite", "split_shot", "pinned_fit", null],
+          "description": "偏差处置分支。用于审计和调参。"
+        }
+      }
+    },
+    "still": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["pending", "generating", "ready", "failed"] },
+        "asset_id": { "type": ["string", "null"] },
+        "local_path": { "type": ["string", "null"] },
+        "aspect_ratio": {
+          "type": ["string", "null"],
+          "description": "必须与 global.aspect_ratio 一致。Grok I2V 传 aspect_ratio 会拉伸源图，所以比例必须在出图阶段就做对。"
+        },
+        "prompt": { "type": ["string", "null"] },
+        "attempts": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "video": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["pending", "submitted", "polling", "done", "failed", "expired"] },
+        "provider": { "type": ["string", "null"], "description": "如 xai / dashscope / local_wan。" },
+        "model": { "type": ["string", "null"] },
+        "request": {
+          "type": "object",
+          "description": "实际发出的请求参数快照，便于复现。",
+          "additionalProperties": true
+        },
+        "request_id": { "type": ["string", "null"] },
+        "source_url": {
+          "type": ["string", "null"],
+          "description": "供应商返回的临时 URL。Grok 的地址会过期，禁止作为长期引用。"
+        },
+        "local_path": {
+          "type": ["string", "null"],
+          "description": "落盘后的本地文件。这才是下游唯一可信引用。"
+        },
+        "fetched_at": { "type": ["string", "null"], "format": "date-time" },
+        "has_audio_track": {
+          "type": "boolean", "default": false,
+          "description": "Grok 默认给成片带音轨。本 harness 自带 TTS，必须识别并剥离。"
+        },
+        "audio_stripped": {
+          "type": "boolean", "default": false,
+          "description": "是否已执行 ffmpeg -an 剥离。为 false 且 has_audio_track 为 true 时，禁止进入合成阶段。"
+        },
+        "moderation_passed": { "type": ["boolean", "null"], "description": "对应 Grok 的 respect_moderation。false 视为失败。" },
+        "attempts": { "type": "integer", "minimum": 0, "default": 0 },
+        "cost_usd": { "type": ["number", "null"], "minimum": 0 },
+        "error_code": { "type": ["string", "null"] },
+        "error": { "type": ["string", "null"] }
+      }
+    },
+    "lipsync": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "boolean", "default": false },
+        "reason": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"], "default": "latentsync" },
+        "status": { "type": "string", "enum": ["skipped", "pending", "done", "failed"], "default": "skipped" },
+        "local_path": { "type": ["string", "null"] }
+      }
+    },
+    "subtitle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": ["string", "null"] },
+        "start_s": { "type": ["number", "null"], "minimum": 0 },
+        "end_s": { "type": ["number", "null"], "minimum": 0 },
+        "description": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

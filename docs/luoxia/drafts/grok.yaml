@@ -1,0 +1,154 @@
+# ============================================================================
+# 草案 —— 尚未生效
+#
+# 目标位置：config/model_catalog/families/grok.yaml
+#
+# 这是按 config/model_catalog/schema/model-catalog.schema.json 与 wan.yaml 的
+# 既有结构手工编写的草案，尚未经过校验器验证。落地步骤：
+#
+#   1. 复制到 config/model_catalog/families/grok.yaml
+#   2. python scripts/build_model_catalog.py
+#   3. python scripts/validate_model_catalog.py
+#   4. 校验若报错，以 schema 为准修正本文件，并把修正结果同步回本草案
+#   5. 生成物 config/model_catalog/generated/model_catalog.json 必须一并提交
+#
+# 参数命名遵循 lumenx 内部约定（ratio / resolution），不使用 xAI 的原生字段名。
+# 到 xAI 方言的翻译在 src/models/grok.py 内完成：
+#   ratio      -> aspect_ratio   （I2V 下通常应省略，见 02-PROVIDER-CONTRACT.md 坑二）
+#   resolution -> resolution
+#   duration   -> duration
+# ============================================================================
+
+family: grok
+display_name: "Grok Imagine (xAI)"
+provider: xai
+
+# 前缀必须写全，不能简写成 grok，否则会误吃将来接入的 Grok 文本模型。
+# provider_registry 按前缀长度从长到短匹配。
+routing_prefixes:
+  - grok-imagine-video-
+
+supported_backends:
+  - xai
+default_backend: xai
+
+credential_sources:
+  xai:
+    - XAI_API_KEY
+
+supported_modalities:
+  - t2v
+  - i2v
+  - r2v
+
+transport:
+  # xAI 接受公网 URL 或 base64 data URL 作为起始图，不走 dashscope 的多模态消息体。
+  image_input_mode:
+    xai: public_url
+
+docs:
+  official_snapshot_ids:
+    - xai/imagine-video/2026-08-04
+
+models:
+  - id: grok/grok-imagine-video-1.5
+    display_name: Grok Imagine Video 1.5
+    description: xAI 图生视频，异步提交轮询；成片默认带音轨需剥离；输出 URL 为临时地址
+    status: active
+    release_stage: stable
+    runtime:
+      xai:
+        gateway: xai
+        api_model_id: grok-imagine-video-1.5
+    modes:
+      i2v:
+        legacy_id: grok-imagine-video-1.5-i2v
+        display_name: Grok Imagine 1.5 I2V
+        description: 以静帧为首帧生成运动镜头，本项目主力模式
+        capabilities: [i2v]
+        ui:
+          selection_group: i2v
+          visible_in: [project_settings, series_settings, video_sidebar, global_settings]
+          order: 70
+          badges: [latest]
+        duration:
+          type: slider
+          min: 1
+          max: 15
+          step: 1
+          default: 5
+        params:
+          resolution:
+            options: [480p, 720p, 1080p]
+            default: 720p
+          # 注意：I2V 显式传比例会拉伸源图。默认沿用输入图比例，
+          # 因此静帧必须在出图阶段就生成为 9:16。此项保留仅为兼容 UI。
+          ratio:
+            options: ["9:16", "16:9", "1:1", "4:3", "3:4", "3:2", "2:3"]
+            default: "9:16"
+          seed: false
+          negativePrompt: false
+          promptExtend: false
+          watermark: false
+        inputs:
+          reference_images:
+            max: 1
+            reference_type: image
+
+      t2v:
+        legacy_id: grok-imagine-video-1.5-t2v
+        display_name: Grok Imagine 1.5 T2V
+        description: 纯文生视频，用于空镜与转场兜底
+        capabilities: [t2v]
+        ui:
+          selection_group: t2v
+          visible_in: [project_settings, global_settings]
+          order: 70
+        duration:
+          type: slider
+          min: 1
+          max: 15
+          step: 1
+          default: 4
+        params:
+          resolution:
+            options: [480p, 720p, 1080p]
+            default: 720p
+          ratio:
+            options: ["9:16", "16:9", "1:1", "4:3", "3:4", "3:2", "2:3"]
+            default: "9:16"
+          seed: false
+          negativePrompt: false
+          promptExtend: false
+          watermark: false
+
+      r2v:
+        legacy_id: grok-imagine-video-1.5-r2v
+        display_name: Grok Imagine 1.5 R2V
+        description: 参考图引导生成。注意 R2V 分辨率上限为 720p，且不可与 image 同时使用
+        capabilities: [r2v]
+        ui:
+          selection_group: r2v
+          visible_in: [project_settings, global_settings]
+          order: 70
+        duration:
+          type: slider
+          min: 1
+          max: 15
+          step: 1
+          default: 5
+        params:
+          resolution:
+            options: [480p, 720p]
+            default: 720p
+          ratio:
+            options: ["9:16", "16:9", "1:1"]
+            default: "9:16"
+          seed: false
+          negativePrompt: false
+          promptExtend: false
+          watermark: false
+        inputs:
+          reference_images:
+            max: 3
+            reference_type: image
