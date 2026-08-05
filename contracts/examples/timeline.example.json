@@ -31,16 +31,16 @@
     {
       "character_id": "lin_wan",
       "display_name": "林晚",
-      "voice_id": "qwen3-young-female",
-      "tts_provider": "qwen3.tts",
+      "voice_id": "iris",
+      "tts_provider": "xai",
       "reference_image_asset_id": "asset_char_linwan_v3",
       "voice_instructions": "清冷、克制，语速偏慢"
     },
     {
       "character_id": "shen_ce",
       "display_name": "沈策",
-      "voice_id": "qwen3-young-male",
-      "tts_provider": "qwen3.tts",
+      "voice_id": "orion",
+      "tts_provider": "xai",
       "reference_image_asset_id": "asset_char_shence_v2",
       "voice_instructions": "低沉、压抑"
     }
@@ -112,7 +112,7 @@
       "audio": {
         "status": "rendered",
         "provider": "qwen3",
-        "voice_id": "qwen3-young-female",
+        "voice_id": "iris",
         "speed": 1.0,
         "measured_duration_s": 1.42,
         "local_path": "output/ep01/audio/ep01_s002.wav",
@@ -180,7 +180,7 @@
       "audio": {
         "status": "rendered",
         "provider": "qwen3",
-        "voice_id": "qwen3-young-male",
+        "voice_id": "orion",
         "speed": 1.05,
         "measured_duration_s": 8.6,
         "local_path": "output/ep01/audio/ep01_s003.wav",
@@ -257,7 +257,7 @@
       "audio": {
         "status": "rendered",
         "provider": "qwen3",
-        "voice_id": "qwen3-young-female",
+        "voice_id": "iris",
         "speed": 1.08,
         "measured_duration_s": 4.2,
         "local_path": "output/ep01/audio/ep01_s004.wav",

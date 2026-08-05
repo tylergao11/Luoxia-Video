@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from src.luoxia.beats.hashing import compute_beats_hash
 from src.luoxia.beats.validator import RETAINED
+from src.luoxia.speech import provider_for_voice
 
 DEFAULT_GLOBAL: Dict[str, Any] = {
     # grok-imagine-video delivers 24fps; declaring 25 only duplicates frames on encode.
@@ -154,7 +155,7 @@ def _timeline_cast_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
         "character_id": entry["character_id"],
         "display_name": entry.get("display_name") or entry["character_id"],
         "voice_id": voice_id,
-        "tts_provider": "qwen3.tts",
+        "tts_provider": provider_for_voice(voice_id, entry.get("tts_provider")),
         "reference_image_asset_id": entry.get("reference_image_path"),
     }
 
@@ -292,7 +293,9 @@ def _dialogue_shot(
         },
         "audio": {
             "status": "pending",
-            "provider": "qwen3",
+            "provider": provider_for_voice(
+                cast_entry.get("voice_id"), cast_entry.get("tts_provider")
+            ),
             "voice_id": cast_entry.get("voice_id"),
             "speed": 1.0,
         },

@@ -39,6 +39,18 @@ const EMOTION_CHIPS = [
     "serious",
 ] as const;
 
+type EmotionChip = (typeof EMOTION_CHIPS)[number];
+
+function splitInstructions(value?: string): { emotion: EmotionChip | ""; freeText: string } {
+    const raw = value?.trim() || "";
+    if (!raw) return { emotion: "", freeText: "" };
+    const [candidate, ...rest] = raw.split(/\s*;\s*/);
+    if (EMOTION_CHIPS.includes(candidate as EmotionChip)) {
+        return { emotion: candidate as EmotionChip, freeText: rest.join("; ") };
+    }
+    return { emotion: "", freeText: raw };
+}
+
 export default function DialogueAudioRow({
     scriptId,
     frameId,
@@ -181,8 +193,8 @@ function DialogueWorkbenchModal({
 }) {
     const t = useTranslations("dialogueAudio");
     const [dialogueDraft, setDialogueDraft] = useState(dialogue || "");
-    const [emotion, setEmotion] = useState<string>(snapshotInstructions || "");
-    const [freeText, setFreeText] = useState<string>("");
+    const [emotion, setEmotion] = useState<string>(() => splitInstructions(snapshotInstructions).emotion);
+    const [freeText, setFreeText] = useState<string>(() => splitInstructions(snapshotInstructions).freeText);
     const [busy, setBusy] = useState(false);
     const [playing, setPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -208,6 +220,11 @@ function DialogueWorkbenchModal({
     const displayVideoUrl = previewVideoUrl || dubbedVideoUrl || videoUrl;
 
     useEffect(() => { setDialogueDraft(dialogue || ""); }, [dialogue]);
+    useEffect(() => {
+        const restored = splitInstructions(snapshotInstructions);
+        setEmotion(restored.emotion);
+        setFreeText(restored.freeText);
+    }, [snapshotInstructions]);
     useEffect(() => {
         if (isOpen) { setError(null); }
     }, [isOpen]);

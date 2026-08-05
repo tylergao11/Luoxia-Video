@@ -1,8 +1,8 @@
 """Local Qwen3-TTS VoiceDesign adapter for dramatic dialogue.
 
-The application process intentionally does not import PyTorch.  Inference runs in the
-dedicated CUDA 12.8 environment under ``output/runtime/qwen3-tts`` (or paths supplied
-through environment variables), so the desktop/backend dependency set stays small.
+The application process intentionally does not import PyTorch.  Inference runs in an
+isolated environment under ``output/runtime/qwen3-tts`` (or paths supplied through
+environment variables), so the desktop/backend dependency set stays small.
 """
 from __future__ import annotations
 
@@ -25,8 +25,8 @@ VOICE_PROFILES: Dict[str, Dict[str, str]] = {
         "name": "少年男主",
         "gender": "male",
         "prompt": (
-            "十七到二十二岁的中国青年男声，清亮中高音、少年感明确，薄而有力量，"
-            "情绪起伏自然，绝不能像中年配音员"
+            "二十岁左右的中国青年男声，自然男声中音区，松弛、清晰，略有少年感，"
+            "不是童声，也不刻意压低或拔高音调"
         ),
     },
     "qwen3-cold-male": {
@@ -62,10 +62,10 @@ _PREFERRED_BY_GENDER = {
 }
 
 _STYLE_DIRECTION = {
-    "soft": "收住力度、轻声但不能虚",
+    "soft": "收住力度，保持自然说话声",
     "whisper": "压低为近距离耳语",
     "loud": "提高力度并爆发，但不喊破",
-    "build-intensity": "逐字推进并持续增强气势",
+    "build-intensity": "情绪逐渐增强，但保持句子连贯",
     "decrease-intensity": "逐渐收住情绪和音量",
     "higher-pitch": "音高自然上扬",
     "lower-pitch": "压低声线并保持清晰",
@@ -74,7 +74,7 @@ _STYLE_DIRECTION = {
     "sing-song": "带轻微旋律感但仍是对白",
     "singing": "按歌唱语气表达",
     "laugh-speak": "带着自然笑意说出",
-    "emphasis": "加重咬字，字字落地",
+    "emphasis": "自然加重重点，不要逐字顿开",
 }
 
 _EVENT_DIRECTION = {
@@ -198,7 +198,17 @@ class Qwen3TTS:
             if style:
                 actions.append(style)
             if actions:
-                directions.append(f"说到‘{phrase}’时" + "，".join(actions))
+                if segment["start_char"] == 0 and segment["end_char"] == len(text):
+                    where = "整句"
+                elif segment["start_char"] == 0:
+                    where = "开头"
+                elif segment["end_char"] == len(text):
+                    where = "结尾"
+                elif len(phrase) <= 8:
+                    where = f"说到‘{phrase}’时"
+                else:
+                    where = "中段"
+                directions.append(where + "，" + "，".join(actions))
         return "；".join(directions)
 
     def _instruction(
@@ -211,9 +221,8 @@ class Qwen3TTS:
         speech_rate: float,
     ) -> str:
         pieces = [
-            "真实影视短剧镜头前的中文对白",
             profile["prompt"],
-            "像真人演员说话，有自然呼吸、微颤和细腻情绪，不能是旁白或朗诵",
+            "这是人物当面对话，不是旁白、朗诵或预告片台词",
         ]
         if instructions:
             pieces.append(str(instructions).strip())
@@ -224,7 +233,7 @@ class Qwen3TTS:
             pieces.append("整体语速紧凑向前，但不能吞字")
         elif speech_rate <= 0.95:
             pieces.append("整体略慢，停顿有戏但不能拖腔")
-        pieces.append("禁止播音腔、广告腔、讲故事腔、故作深沉和无意义拖尾")
+        pieces.append("保持自然口语节奏，句尾及时收住，避免播音腔和朗诵腔")
         return "。".join(piece.rstrip("。") for piece in pieces if piece) + "。"
 
     @staticmethod
@@ -236,7 +245,7 @@ class Qwen3TTS:
         take_id: Optional[str],
     ) -> str:
         payload = (
-            f"qwen3-tts-1.7b-voicedesign-v1\0{text}\0{voice_id}\0{instruction}\0"
+            f"qwen3-tts-1.7b-voicedesign-v2\0{text}\0{voice_id}\0{instruction}\0"
             f"{float(speed):.6f}\0{take_id or ''}"
         ).encode("utf-8")
         return "sha256:" + hashlib.sha256(payload).hexdigest()
@@ -299,7 +308,7 @@ class Qwen3TTS:
         }
         try:
             run = subprocess.run(
-                [str(self.python_path), "-m", "src.audio.qwen3_tts", "--worker"],
+                [str(self.python_path), "-X", "utf8", "-m", "src.audio.qwen3_tts", "--worker"],
                 input=json.dumps(request, ensure_ascii=False),
                 cwd=self.repo_root,
                 capture_output=True,
@@ -370,13 +379,14 @@ def _worker_main() -> int:
 
     from qwen_tts import Qwen3TTSModel
 
-    if not torch.cuda.is_available():
-        raise RuntimeError("Qwen3-TTS VoiceDesign requires a CUDA GPU in this runtime")
+    use_cuda = torch.cuda.is_available()
+    device = "cuda:0" if use_cuda else "cpu"
+    dtype = torch.bfloat16 if use_cuda else torch.float32
     set_seed(int(request["seed"]))
     model = Qwen3TTSModel.from_pretrained(
         request["model_path"],
-        device_map="cuda:0",
-        dtype=torch.bfloat16,
+        device_map=device,
+        dtype=dtype,
         attn_implementation="sdpa",
     )
     wavs, sample_rate = model.generate_voice_design(
@@ -385,14 +395,6 @@ def _worker_main() -> int:
         instruct=request["instruction"],
         non_streaming_mode=True,
         max_new_tokens=2048,
-        do_sample=True,
-        temperature=0.9,
-        top_p=0.95,
-        top_k=60,
-        repetition_penalty=1.06,
-        subtalker_temperature=0.92,
-        subtalker_top_p=0.98,
-        subtalker_top_k=60,
     )
     sf.write(request["output_path"], wavs[0], sample_rate, subtype="PCM_16")
     return 0

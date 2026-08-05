@@ -13,17 +13,27 @@ import hashlib
 import json
 import logging
 import os
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.audio.performance import clean_audio_timestamps, compile_performance
+from src.audio.performance import (
+    SPEECH_RENDER_CONTRACT,
+    clean_audio_timestamps,
+    compile_performance,
+    direction_is_neutral,
+)
 
 logger = logging.getLogger(__name__)
 
 _API_BASE = "https://api.x.ai/v1"
 _DEFAULT_SAMPLE_RATE = 44100
+_DEFAULT_PRODUCT_SPEED = 0.88
+_XAI_MIN_SPEED = 0.7
+_XAI_MAX_SPEED = 1.5
+_CONTROL_PADDING_THRESHOLD_S = 0.70
+_NATURAL_HEAD_PAD_S = 0.28
+_NATURAL_TAIL_PAD_S = 0.36
 
 # Built-in voices returned by the live REST `GET /v1/tts/voices` catalog. All are
 # multilingual; custom cloned voice ids are accepted too, which is why an unknown id is
@@ -113,6 +123,7 @@ class XaiTTS:
         sample_rate: int = _DEFAULT_SAMPLE_RATE,
         base_url: Optional[str] = None,
         token: Optional[str] = None,
+        product_speed: Optional[float] = None,
         timeout_s: float = 120.0,
     ):
         self.language = language
@@ -120,6 +131,10 @@ class XaiTTS:
         self.timeout_s = float(timeout_s)
         self._token = (token or "").strip() or None
         self._base_url = (base_url or "").rstrip("/") or None
+        configured_speed = product_speed if product_speed is not None else os.getenv("LUOXIA_XAI_BASE_SPEED")
+        self.product_speed = float(configured_speed or _DEFAULT_PRODUCT_SPEED)
+        if not _XAI_MIN_SPEED <= self.product_speed <= 1.0:
+            raise ValueError("LUOXIA_XAI_BASE_SPEED must be in [0.7, 1.0]")
 
     def _headers(self) -> Dict[str, str]:
         if not self._token:
@@ -149,7 +164,7 @@ class XaiTTS:
         explicit cache buster for deliberate A/B takes because xAI exposes no seed.
         """
         payload = (
-            f"xai-tts-v3\0{self.language}\0{self.sample_rate}\0{request_text}\0"
+            f"{SPEECH_RENDER_CONTRACT}:xai\0{self.language}\0{self.sample_rate}\0{request_text}\0"
             f"{voice_id}\0{float(speed):.6f}\0{take_id or ''}"
         ).encode("utf-8")
         return "sha256:" + hashlib.sha256(payload).hexdigest()
@@ -183,7 +198,8 @@ class XaiTTS:
             legacy_direction=instructions,
         )
 
-        digest = self.content_sha256(tagged, voice_id, speech_rate, take_id)
+        provider_speed = self._provider_speed(speech_rate)
+        digest = self.content_sha256(tagged, voice_id, provider_speed, take_id)
         meta_path = Path(str(output_path) + ".sha256")
         out = Path(output_path)
         if out.suffix.lower() != ".wav":
@@ -194,13 +210,13 @@ class XaiTTS:
                 logger.info("xai tts cache hit %s (%.3fs)", out, measured)
                 return str(out), measured, digest
 
-        if (instructions or performance) and not applied:
+        if (instructions or performance) and not applied and not direction_is_neutral(instructions):
             logger.warning(
                 "performance direction produced no xai speech tag; line delivered plain: %s",
                 line[:20],
             )
 
-        payload = self._request(tagged, voice_id, speech_rate)
+        payload = self._request(tagged, voice_id, provider_speed)
         cleaned = clean_audio_timestamps(payload.get("audio_timestamps"), line)
         measured, trim_start = self._write_audio(
             out,
@@ -228,10 +244,11 @@ class XaiTTS:
             logger.warning("xai timestamps could not align to clean text: %s", out.name)
         meta_path.write_text(digest + "\n", encoding="utf-8", newline="\n")
         logger.info(
-            "xai tts %s voice=%s speed=%.2f tags=%s plan=%s -> %.3fs",
+            "xai tts %s voice=%s requested_speed=%.2f provider_speed=%.2f tags=%s plan=%s -> %.3fs",
             out.name,
             voice_id,
             speech_rate,
+            provider_speed,
             ",".join(applied) or "-",
             (effective_plan or {}).get("intent") or "-",
             measured,
@@ -252,9 +269,10 @@ class XaiTTS:
         request spent almost ten seconds before the first Chinese character and another
         1.6 seconds after the last one.  When there is no deliberate event at position
         zero, keep a small natural pad around the actual spoken window and discard that
-        control-token dead air before it can become timeline authority.
+        control-token dead air before it can become timeline authority.  xAI returns
+        PCM WAV, so trimming uses exact frame boundaries and has no FFmpeg dependency.
         """
-        from src.utils.system_check import get_ffmpeg_path
+        from src.luoxia.media.wav import trim_wav_file
 
         out.parent.mkdir(parents=True, exist_ok=True)
         raw_handle = tempfile.NamedTemporaryFile(
@@ -278,47 +296,24 @@ class XaiTTS:
                     int(segment.get("start_char") or 0) == 0 and segment.get("event_before")
                     for segment in ((performance or {}).get("segments") or [])
                 )
-                if not leading_event and first > 0.25:
-                    trim_start = max(0.0, first - 0.12)
-                if raw_duration - last > 0.35:
-                    trim_end = min(raw_duration, last + 0.18)
+                if not leading_event and first > _CONTROL_PADDING_THRESHOLD_S:
+                    trim_start = max(0.0, first - _NATURAL_HEAD_PAD_S)
+                if raw_duration - last > _CONTROL_PADDING_THRESHOLD_S:
+                    trim_end = min(raw_duration, last + _NATURAL_TAIL_PAD_S)
 
             candidate = raw_path
             if trim_start > 0.02 or trim_end < raw_duration - 0.02:
-                ffmpeg = get_ffmpeg_path()
-                if not ffmpeg:
-                    raise RuntimeError("ffmpeg not found; cannot remove xAI control-token padding")
                 trim_handle = tempfile.NamedTemporaryFile(
                     prefix=f"{out.stem}.trim-", suffix=".wav", dir=out.parent, delete=False
                 )
                 trimmed_path = Path(trim_handle.name)
                 trim_handle.close()
-                result = subprocess.run(
-                    [
-                        ffmpeg,
-                        "-y",
-                        "-v",
-                        "error",
-                        "-i",
-                        str(raw_path),
-                        "-ss",
-                        f"{trim_start:.6f}",
-                        "-t",
-                        f"{max(0.01, trim_end - trim_start):.6f}",
-                        "-ac",
-                        "1",
-                        "-ar",
-                        str(self.sample_rate),
-                        "-c:a",
-                        "pcm_s16le",
-                        str(trimmed_path),
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
+                trim_start = trim_wav_file(
+                    raw_path,
+                    trimmed_path,
+                    start_s=trim_start,
+                    end_s=trim_end,
                 )
-                if result.returncode != 0:
-                    raise RuntimeError(f"trimming xai control padding failed: {result.stderr[-500:]}")
                 candidate = trimmed_path
                 logger.info(
                     "xai tts trimmed control padding head=%.3fs tail=%.3fs",
@@ -357,6 +352,22 @@ class XaiTTS:
         # Anything else may legitimately be a custom cloned voice id.
         logger.info("voice_id %r is not built-in; assuming a custom xai voice", voice_id)
         return voice_id
+
+    def _provider_speed(self, requested_speed: float) -> float:
+        """Translate product-relative pace to xAI's calibrated absolute multiplier."""
+        requested = float(requested_speed)
+        if requested <= 0:
+            raise ValueError("speech_rate must be positive")
+        calibrated = requested * self.product_speed
+        clamped = max(_XAI_MIN_SPEED, min(_XAI_MAX_SPEED, calibrated))
+        if abs(clamped - calibrated) > 1e-6:
+            logger.warning(
+                "xai speech speed %.3f calibrated to %.3f and clamped to %.3f",
+                requested,
+                calibrated,
+                clamped,
+            )
+        return round(clamped, 3)
 
     def _request(self, text: str, voice_id: str, speed: float) -> Dict[str, Any]:
         import requests

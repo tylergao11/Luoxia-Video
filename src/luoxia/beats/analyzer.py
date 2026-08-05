@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from src.audio.performance import normalize_performance
-from src.audio.qwen3_tts import voices_for_gender
 from src.luoxia.beats import repairs as repair_log
 from src.luoxia.beats.prompts import (
     ANALYZE_CARRYOVER_TEMPLATE,
@@ -24,6 +23,7 @@ from src.luoxia.beats.segmenter import (
     span_for_range,
     split_paragraphs,
 )
+from src.luoxia.speech import voices_for_gender
 from src.luoxia.beats.validator import script_char_count
 from src.luoxia.llm.client import LuoxiaLLM
 

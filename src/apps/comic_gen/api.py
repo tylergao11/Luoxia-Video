@@ -3062,8 +3062,10 @@ def voice_preview(request: VoicePreviewRequest):
 
     cache_dir = "output/cache/voice_preview"
     os.makedirs(cache_dir, exist_ok=True)
+    from src.audio.performance import SPEECH_RENDER_CONTRACT
+
     cache_key = hashlib.md5(
-        f"speech-v3|{request.voice_id}|{request.text}|{request.speed}|{request.pitch}|{request.volume}|{request.instructions or ''}".encode("utf-8")
+        f"{SPEECH_RENDER_CONTRACT}|{request.voice_id}|{request.text}|{request.speed}|{request.pitch}|{request.volume}|{request.instructions or ''}".encode("utf-8")
     ).hexdigest()
     extension = pipeline.audio_generator.preview_extension(request.voice_id)
     cache_path = os.path.join(cache_dir, f"{cache_key}{extension}")

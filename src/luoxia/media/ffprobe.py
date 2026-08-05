@@ -5,8 +5,11 @@ import os
 import platform
 import shutil
 import subprocess
+import wave
 from pathlib import Path
 from typing import Optional
+
+from src.luoxia.media.wav import measure_wav_duration_s
 
 
 def resolve_ffprobe_path() -> Optional[str]:
@@ -44,13 +47,22 @@ def _sibling_ffprobe(ffmpeg_path: str) -> Optional[str]:
 
 
 def measure_media_duration_s(path: str | Path, *, ffprobe_path: Optional[str] = None) -> float:
-    """Return media duration in seconds via ffprobe. No estimation allowed."""
+    """Return measured media duration; WAV frame counts need no external probe."""
     media = Path(path)
     if not media.is_file():
         raise FileNotFoundError(f"media file not found: {media}")
 
+    wav_error: Optional[Exception] = None
+    if media.suffix.lower() == ".wav":
+        try:
+            return measure_wav_duration_s(media)
+        except (EOFError, OSError, ValueError, wave.Error) as exc:
+            wav_error = exc
+
     probe = ffprobe_path or resolve_ffprobe_path()
     if not probe:
+        if wav_error is not None:
+            raise RuntimeError(f"invalid WAV file {media}: {wav_error}") from wav_error
         raise RuntimeError(
             "ffprobe not found. Install FFmpeg with ffprobe on PATH; "
             "audio duration must be measured, never estimated."

@@ -10,6 +10,8 @@ import hashlib
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+SPEECH_RENDER_CONTRACT = "speech-v4"
+
 STYLE_TAGS = frozenset(
     {
         "soft",
@@ -52,19 +54,34 @@ INLINE_TAGS = frozenset(
 # the contrast that dramatic speech depends on.
 _STYLE_KEYWORDS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("whisper", ("耳语", "低语", "悄声", "压低声音", "声音极轻")),
-    ("laugh-speak", ("笑着说", "带笑", "笑道")),
+    ("laugh-speak", ("笑着说", "带笑", "笑道", "happy", "开心", "高兴", "喜悦", "欣喜")),
     ("loud", ("大声", "怒吼", "咆哮", "厉声", "嘶喊", "喊道", "怒不可遏", "吼")),
-    ("build-intensity", ("渐强", "越来越激动", "逐渐激动", "情绪上涨", "爆发")),
-    ("decrease-intensity", ("渐弱", "平息", "声音低下去")),
-    ("higher-pitch", ("尖锐", "拔高", "兴奋")),
+    (
+        "build-intensity",
+        ("渐强", "越来越激动", "逐渐激动", "情绪上涨", "爆发", "angry", "愤怒", "生气", "恼怒", "不甘", "恨意"),
+    ),
+    (
+        "decrease-intensity",
+        ("渐弱", "平息", "声音低下去", "sad", "悲伤", "难过", "伤心", "悲痛", "失落", "委屈"),
+    ),
+    ("higher-pitch", ("尖锐", "拔高", "兴奋", "surprised", "惊讶", "震惊", "错愕", "诧异")),
     (
         "emphasis",
-        ("强调", "加重", "咬字", "咬死", "咬牙", "字字", "一字一句", "一字一顿", "决绝", "轻蔑", "不容置疑"),
+        (
+            "强调", "加重", "咬字", "咬死", "咬牙", "字字", "一字一句", "一字一顿",
+            "决绝", "轻蔑", "不容置疑", "serious", "严肃", "认真", "郑重", "凝重",
+        ),
     ),
-    ("lower-pitch", ("低沉", "沉声", "压抑", "阴冷", "冷静", "冷漠", "冷冷", "更冷", "冷下去")),
+    (
+        "lower-pitch",
+        ("低沉", "沉声", "压抑", "阴冷", "冷静", "冷漠", "冷冷", "更冷", "冷下去", "calm", "镇定", "从容"),
+    ),
     ("slow", ("缓慢", "迟疑", "犹豫", "慢条斯理", "拉长音")),
     ("fast", ("急促", "焦急", "慌乱", "飞快")),
-    ("soft", ("温柔", "柔和", "轻柔", "平静", "淡淡", "很轻", "轻声", "克制", "哽咽", "声音发颤", "含泪")),
+    (
+        "soft",
+        ("gentle", "温柔", "柔和", "轻柔", "平静", "淡淡", "很轻", "轻声", "克制", "哽咽", "声音发颤", "含泪"),
+    ),
 )
 
 # Deliberately conservative.  In particular, generic 哽咽 is acting direction rather
@@ -82,10 +99,17 @@ _EVENT_KEYWORDS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
 _CLAUSE_RE = re.compile(r"[^。！？!?；;]+[。！？!?；;]?\s*")
 _QUOTED_RE = re.compile(r"[“\"『「](.+?)[”\"』」]")
 _CALLED_RE = re.compile(r"(?:叫|喊|说到|说出)([^，。！？；;\s]{1,6})时")
+_NEUTRAL_RE = re.compile(r"(?:^|[：:；;，,\s])(neutral|中性|自然|正常)(?:$|[；;，,\s])", re.IGNORECASE)
+_DRAMATIC_BREAK_RE = re.compile(r"(?:—{2,}|…{2,})")
 
 
 def text_sha256(text: str) -> str:
     return "sha256:" + hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def direction_is_neutral(direction: Optional[str]) -> bool:
+    """Whether a no-tag result is an explicit neutral request rather than a miss."""
+    return bool(_NEUTRAL_RE.search((direction or "").strip()))
 
 
 def normalize_performance(text: str, raw: Any) -> Optional[Dict[str, Any]]:
@@ -252,7 +276,7 @@ def compile_performance(
     if plan is None:
         plan = performance_from_direction(text, legacy_direction)
     if plan is None:
-        return text, [], None
+        return _compile_dramatic_breaks(text, [], None)
 
     cursor = 0
     chunks: List[str] = []
@@ -274,7 +298,34 @@ def compile_performance(
             chunks.append(phrase)
         cursor = end
     chunks.append(text[cursor:])
-    return "".join(chunks), applied, plan
+    return _compile_dramatic_breaks("".join(chunks), applied, plan)
+
+
+def _compile_dramatic_breaks(
+    compiled: str,
+    applied: List[str],
+    plan: Optional[Dict[str, Any]],
+) -> Tuple[str, List[str], Optional[Dict[str, Any]]]:
+    """Make long dashes/ellipses audible without changing subtitle text.
+
+    xAI often reads Chinese long dashes as ordinary punctuation.  These marks are an
+    authored acting beat, so compile one official pause tag unless the performance plan
+    already placed a pause immediately after it.
+    """
+    additions = 0
+
+    def add_pause(match: re.Match[str]) -> str:
+        nonlocal additions
+        following = compiled[match.end() : match.end() + 24]
+        if re.match(r"\s*\[(?:pause|long-pause)\]", following):
+            return match.group(0)
+        additions += 1
+        return match.group(0) + "[pause]"
+
+    rendered = _DRAMATIC_BREAK_RE.sub(add_pause, compiled)
+    if additions:
+        applied = [*applied, *(["[pause]@dramatic-break"] * additions)]
+    return rendered, applied, plan
 
 
 def validate_performance(text: str, performance: Any) -> List[str]:
@@ -361,6 +412,7 @@ def _clauses(text: str) -> List[Tuple[int, int, str]]:
 
 
 def _infer_style(note: str) -> Optional[str]:
+    note = note.lower()
     for style, keywords in _STYLE_KEYWORDS:
         if any(keyword in note for keyword in keywords):
             return style

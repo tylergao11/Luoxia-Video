@@ -7,7 +7,7 @@
 | 变量 | 用途 | 是否必须 |
 | --- | --- | --- |
 | 订阅池登录或 `XAI_API_KEY` | Luoxia LLM、图片与 Grok 视频，取决于当前鉴权模式 | 必须二选一 |
-| `output/runtime/qwen3-tts` | 本地 Qwen3-TTS VoiceDesign 配音 | 默认 TTS 必需 |
+| `output/runtime/qwen3-tts` | 本地 Qwen3-TTS VoiceDesign 配音 | 可选离线替代；默认 xAI TTS 不依赖此目录 |
 | `output/runtime/musetalk` | MuseTalk 1.5 音频驱动口型 | 特写对白镜必需 |
 | `DASHSCOPE_API_KEY` | 仍选择 DashScope 的旧工作流或模型 | Luoxia 主链不需要 |
 

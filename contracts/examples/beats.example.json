@@ -37,7 +37,7 @@
     {
       "character_id": "lin_wan",
       "display_name": "林晚",
-      "voice_id": "qwen3-young-female",
+      "voice_id": "iris",
       "role": "protagonist",
       "aliases": [
         "林家大小姐",
@@ -49,7 +49,7 @@
     {
       "character_id": "shen_ce",
       "display_name": "沈策",
-      "voice_id": "qwen3-young-male",
+      "voice_id": "orion",
       "role": "antagonist",
       "aliases": [
         "沈总"

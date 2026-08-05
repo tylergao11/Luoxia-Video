@@ -78,7 +78,7 @@
           "character_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
           "display_name": { "type": "string" },
           "voice_id": { "type": "string" },
-          "tts_provider": { "type": "string", "default": "qwen3.tts" },
+          "tts_provider": { "type": "string", "default": "xai" },
           "reference_image_asset_id": { "type": ["string", "null"] },
           "voice_instructions": { "type": ["string", "null"], "description": "情绪/风格指令，若 TTS 供应商支持。" }
         }

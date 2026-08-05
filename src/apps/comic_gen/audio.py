@@ -5,10 +5,14 @@ from typing import Dict, Any, List, Optional
 from .models import StoryboardFrame, Character, GenerationStatus
 from ...utils import get_logger
 from ...audio.tts import TTSProcessor
+from ...audio.doubao_tts import VOICES as DOUBAO_VOICES
+from ...audio.doubao_tts import DoubaoTTS, voice_records as doubao_voice_records
 from ...audio.qwen3_tts import VOICE_PROFILES as QWEN3_VOICES
 from ...audio.qwen3_tts import Qwen3TTS, voice_records as qwen3_voice_records
 from ...audio.xai_tts import VOICES as XAI_VOICES
 from ...audio.xai_tts import XaiTTS, voice_records as xai_voice_records
+from ...audio.performance import SPEECH_RENDER_CONTRACT
+from ...luoxia.speech import configured_tts_provider
 
 logger = get_logger(__name__)
 
@@ -16,7 +20,7 @@ logger = get_logger(__name__)
 def _compute_dialogue_hash(text: str, voice_id: Optional[str], instructions: Optional[str]) -> str:
     """PR-3j · Snapshot hash for stale detection. Frame is STALE when current
     (dialogue|voice_id|instructions) hash != stored snapshot."""
-    payload = f"{text or ''}|{voice_id or ''}|{instructions or ''}"
+    payload = f"{SPEECH_RENDER_CONTRACT}|{text or ''}|{voice_id or ''}|{instructions or ''}"
     return hashlib.md5(payload.encode("utf-8")).hexdigest()
 
 
@@ -95,13 +99,20 @@ class AudioGenerator:
         # Local VoiceDesign runs in its own CUDA environment; construction only checks
         # paths and never loads the model into the API process.
         self.qwen3_tts = Qwen3TTS()
+        # Doubao also resolves its API key lazily so voice discovery stays side-effect free.
+        self.doubao_tts = DoubaoTTS()
+
+    @staticmethod
+    def _prefer_doubao_system_voices() -> bool:
+        return configured_tts_provider() == "doubao"
 
     def _prefer_qwen3_system_voices(self) -> bool:
-        requested = (os.getenv("LUOXIA_TTS_PROVIDER") or "qwen3").strip().lower()
-        return requested in {"qwen3", "qwen3.tts", "qwen3-tts"} and self.qwen3_tts.available()
+        return configured_tts_provider() == "qwen3" and self.qwen3_tts.available()
 
     @staticmethod
     def _prefer_xai_system_voices() -> bool:
+        if configured_tts_provider() == "xai":
+            return True
         from src.auth.resolver import status
 
         auth = status()
@@ -119,15 +130,26 @@ class AudioGenerator:
     def is_qwen3_voice(voice_id: Optional[str]) -> bool:
         return bool(voice_id and voice_id in QWEN3_VOICES)
 
+    @staticmethod
+    def is_doubao_voice(voice_id: Optional[str]) -> bool:
+        return bool(voice_id and voice_id in DOUBAO_VOICES)
+
     def has_tts_for_voice(self, voice_id: Optional[str]) -> bool:
         return (
-            self.is_qwen3_voice(voice_id)
+            self.is_doubao_voice(voice_id)
+            or self.is_qwen3_voice(voice_id)
             or self.is_xai_voice(voice_id)
             or self.tts is not None
         )
 
     def preview_extension(self, voice_id: str) -> str:
-        return ".wav" if self.is_qwen3_voice(voice_id) or self.is_xai_voice(voice_id) else ".mp3"
+        return (
+            ".wav"
+            if self.is_doubao_voice(voice_id)
+            or self.is_qwen3_voice(voice_id)
+            or self.is_xai_voice(voice_id)
+            else ".mp3"
+        )
 
     def synthesize_preview(
         self,
@@ -142,6 +164,15 @@ class AudioGenerator:
         model_override: Optional[str],
         family_override: Optional[str],
     ) -> None:
+        if self.is_doubao_voice(voice_id):
+            self.doubao_tts.synthesize_measured(
+                text=text,
+                output_path=output_path,
+                voice=voice_id,
+                speech_rate=speed,
+                instructions=instructions,
+            )
+            return
         if self.is_qwen3_voice(voice_id):
             self.qwen3_tts.synthesize_measured(
                 text=text,
@@ -182,6 +213,8 @@ class AudioGenerator:
         3 tabs (系统音色 / 我的复刻 / 我的设计) with dialect/international
         sub-groupings inside 系统音色.
         """
+        if self._prefer_doubao_system_voices():
+            return doubao_voice_records()
         if self._prefer_qwen3_system_voices():
             return qwen3_voice_records()
         if self._prefer_xai_system_voices():
@@ -269,14 +302,24 @@ class AudioGenerator:
         try:
             extension = (
                 ".wav"
-                if self.is_qwen3_voice(character.voice_id) or self.is_xai_voice(character.voice_id)
+                if self.is_doubao_voice(character.voice_id)
+                or self.is_qwen3_voice(character.voice_id)
+                or self.is_xai_voice(character.voice_id)
                 else ".mp3"
             )
             output_path = os.path.join(self.output_dir, 'dialogue', f"{frame.id}{extension}")
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
             voice = character.voice_id
-            if self.is_qwen3_voice(voice):
+            if self.is_doubao_voice(voice):
+                self.doubao_tts.synthesize_measured(
+                    text=text,
+                    output_path=output_path,
+                    voice=voice,
+                    speech_rate=speed,
+                    instructions=instructions,
+                )
+            elif self.is_qwen3_voice(voice):
                 self.qwen3_tts.synthesize_measured(
                     text=text,
                     output_path=output_path,
