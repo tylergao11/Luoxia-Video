@@ -13,6 +13,8 @@ from src.luoxia.beats.prompts import (
     ANALYZE_SYSTEM,
     ANALYZE_USER_TEMPLATE,
     BEAT_TYPES,
+    LANGUAGE_ANALYZE_SYSTEM,
+    LANGUAGE_ANALYZE_USER_TEMPLATE,
 )
 from src.luoxia.beats.segmenter import (
     Paragraph,
@@ -73,6 +75,7 @@ def analyze_novel(
     llm: Optional[LuoxiaLLM] = None,
     chat_json: Optional[ChatJSON] = None,
     global_overrides: Optional[Dict[str, Any]] = None,
+    language_only: bool = False,
 ) -> Dict[str, Any]:
     """Slice + score a novel into a phase=scored beats document.
 
@@ -93,7 +96,7 @@ def analyze_novel(
 
     paragraphs = split_paragraphs(body)
     doc: Dict[str, Any] = {
-        "schema_version": "1.2.0",
+        "schema_version": "1.3.0",
         "work_id": wid,
         "title": title or wid,
         "phase": "scored",
@@ -114,19 +117,31 @@ def analyze_novel(
     }
 
     raw_cast, raw_beats, chunk_count = _analyze_chunks(
-        paragraphs, work_id=wid, title=title or wid, chat_json=call, doc=doc
+        paragraphs,
+        work_id=wid,
+        title=title or wid,
+        chat_json=call,
+        doc=doc,
+        system_prompt=LANGUAGE_ANALYZE_SYSTEM if language_only else ANALYZE_SYSTEM,
+        user_template=LANGUAGE_ANALYZE_USER_TEMPLATE if language_only else ANALYZE_USER_TEMPLATE,
     )
     doc["title"] = doc["title"] or wid
-    doc["cast"] = _normalize_cast(raw_cast, doc=doc)
+    doc["cast"] = _normalize_cast(raw_cast, doc=doc, include_downstream=not language_only)
     cast_ids = {c["character_id"] for c in doc["cast"]}
 
     ordered = _resolve_spans(raw_beats, paragraphs=paragraphs, doc=doc)
     ordered = _fill_coverage_gaps(ordered, paragraphs=paragraphs, text=body, doc=doc)
-    doc["beats"] = _normalize_beats(ordered, cast_ids=cast_ids, text=body)
+    doc["beats"] = _normalize_beats(
+        ordered,
+        cast_ids=cast_ids,
+        text=body,
+        include_downstream=not language_only,
+    )
 
     _ensure_opening(doc)
     _ensure_closing_hook(doc)
-    _ensure_lines_for_hot_beats(doc)
+    if not language_only:
+        _ensure_lines_for_hot_beats(doc)
 
     doc["quality"] = repair_log.summarize(doc)
     doc["audit"].append(
@@ -136,7 +151,8 @@ def analyze_novel(
             "action": "segment_score",
             "detail": (
                 f"chars={len(body)} paragraphs={len(paragraphs)} chunks={chunk_count} "
-                f"beats={len(doc['beats'])} repairs={doc['quality']['repair_count']}"
+                f"beats={len(doc['beats'])} repairs={doc['quality']['repair_count']} "
+                f"scope={'language' if language_only else 'legacy_full'}"
             ),
         }
     )
@@ -163,6 +179,8 @@ def _analyze_chunks(
     title: str,
     chat_json: ChatJSON,
     doc: Dict[str, Any],
+    system_prompt: str = ANALYZE_SYSTEM,
+    user_template: str = ANALYZE_USER_TEMPLATE,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], int]:
     chunks = chunk_paragraphs(paragraphs, max_chars=CHUNK_CHARS)
     cast: List[Dict[str, Any]] = []
@@ -183,7 +201,7 @@ def _analyze_chunks(
                 )
                 or "（无）",
             )
-        user = ANALYZE_USER_TEMPLATE.format(
+        user = user_template.format(
             work_id=work_id,
             title=title,
             chunk_no=i,
@@ -197,7 +215,7 @@ def _analyze_chunks(
         try:
             data = chat_json(
                 [
-                    {"role": "system", "content": ANALYZE_SYSTEM},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user},
                 ]
             )
@@ -337,7 +355,12 @@ def _fill_coverage_gaps(
     return beats
 
 
-def _normalize_cast(cast: List[Dict[str, Any]], *, doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _normalize_cast(
+    cast: List[Dict[str, Any]],
+    *,
+    doc: Dict[str, Any],
+    include_downstream: bool = True,
+) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     female_i = male_i = 0
     for i, raw in enumerate(cast):
@@ -348,8 +371,8 @@ def _normalize_cast(cast: List[Dict[str, Any]], *, doc: Dict[str, Any]) -> List[
             if raw.get("role") in {"protagonist", "antagonist", "support", "narrator"}
             else "support"
         )
-        voice = raw.get("voice_id")
-        if not voice:
+        voice = raw.get("voice_id") if include_downstream else None
+        if include_downstream and not voice:
             female = any(k in display for k in ("女", "姐", "妹", "娘", "妃", "太太", "小姐"))
             if role == "protagonist" and not female:
                 female = i == 0
@@ -366,8 +389,12 @@ def _normalize_cast(cast: List[Dict[str, Any]], *, doc: Dict[str, Any]) -> List[
                 detail=f"{cid}: no voice_id from model, assigned {voice}",
                 actor="analyzer",
             )
-        appearance = (raw.get("appearance") or "").strip() or None
-        if not appearance:
+        appearance = (
+            ((raw.get("appearance") or "").strip() or None)
+            if include_downstream
+            else None
+        )
+        if include_downstream and not appearance:
             repair_log.record(
                 doc,
                 code="appearance_missing",
@@ -390,14 +417,17 @@ def _normalize_cast(cast: List[Dict[str, Any]], *, doc: Dict[str, Any]) -> List[
             doc,
             code="cast_empty",
             severity="high",
-            detail="model returned no cast; falling back to a single narrator voice",
+            detail=(
+                "model returned no cast; falling back to a single narrator"
+                + (" voice" if include_downstream else "")
+            ),
             actor="analyzer",
         )
         out = [
             {
                 "character_id": "narrator",
                 "display_name": "旁白",
-                "voice_id": DEFAULT_MALE_VOICES[0],
+                "voice_id": DEFAULT_MALE_VOICES[0] if include_downstream else None,
                 "role": "narrator",
                 "appearance": None,
                 "aliases": [],
@@ -411,6 +441,7 @@ def _normalize_beats(
     *,
     cast_ids: set[str],
     text: str,
+    include_downstream: bool = True,
 ) -> List[Dict[str, Any]]:
     if not cast_ids:
         cast_ids = {"narrator"}
@@ -446,14 +477,24 @@ def _normalize_beats(
                 {
                     "character_id": cid,
                     "text": t,
-                    "delivery": ln.get("delivery"),
-                    "performance": normalize_performance(t, ln.get("performance")),
-                    "shot_size": size if size in SHOT_SIZES else "medium",
+                    "delivery": ln.get("delivery") if include_downstream else None,
+                    "performance": (
+                        normalize_performance(t, ln.get("performance"))
+                        if include_downstream
+                        else None
+                    ),
+                    "shot_size": (
+                        size if size in SHOT_SIZES else "medium"
+                    ) if include_downstream else None,
                     "line_type": "narration" if ln.get("line_type") == "narration" else "dialogue",
                 }
             )
 
-        visual = raw.get("visual") if isinstance(raw.get("visual"), dict) else None
+        visual = (
+            raw.get("visual")
+            if include_downstream and isinstance(raw.get("visual"), dict)
+            else None
+        )
         if visual:
             size = visual.get("shot_size")
             visual = {

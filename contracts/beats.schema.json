@@ -9,8 +9,8 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0", "1.2.0"],
-      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/04-BEATS-CONTRACT.md 记录迁移方式。1.2.0 新增可选的 lines[].performance（局部表演调度）；旧文件继续有效。"
+      "enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0"],
+      "description": "契约版本。破坏性变更必须升主版本，并在 docs/luoxia/04-BEATS-CONTRACT.md 记录迁移方式。1.3.0 新增可选的 visuals[].characters（镜头可见角色）；旧文件继续有效。"
     },
     "work_id": {
       "type": "string",
@@ -399,6 +399,13 @@
         "subject": {
           "type": ["string", "null"],
           "description": "镜头对准谁的 character_id。reaction 必填（不指定是谁的脸，这个镜头就没法出图也没法锁脸）；insert/establishing 可留空。"
+        },
+        "characters": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "description": "这个片段中实际可见的角色。每段独立生成，不能依赖上一段自动记住谁在画面里。reaction 只放 subject。"
         },
         "scene_id": { "type": ["string", "null"] },
         "shot_size": {

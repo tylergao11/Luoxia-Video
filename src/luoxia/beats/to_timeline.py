@@ -107,6 +107,12 @@ def build_timeline_draft(
                         f"beat '{beat_id}': visual subject '{subject}' not in cast"
                     )
                 used_characters.add(subject)
+            for cid in visual.get("characters") or []:
+                if cid not in cast_by_id:
+                    raise BridgeError(
+                        f"beat '{beat_id}': visual character '{cid}' not in cast"
+                    )
+                used_characters.add(cid)
 
     if not shots:
         raise BridgeError(f"episode {episode_id} produced no shots")
@@ -199,14 +205,22 @@ def _visual_shot(
 ) -> Dict[str, Any]:
     kind = str(visual.get("kind") or "establishing")
     subject = visual.get("subject")
+    declared_characters = list(visual.get("characters") or [])
     # A reaction shot exists to show one face; anyone else in frame defeats it.
-    shot_characters = [subject] if subject else list(characters or [])
+    if kind == "reaction" and subject:
+        shot_characters = [subject]
+    elif declared_characters:
+        shot_characters = declared_characters
+    elif subject:
+        shot_characters = [subject]
+    else:
+        shot_characters = list(characters or [])
     duration = (
         visual.get("action_duration_s")
         or _KIND_DEFAULT_DURATION_S.get(kind)
         or g["default_action_duration_s"]
     )
-    return {
+    shot = {
         "shot_id": f"{episode_id}_{beat['beat_id']}_v{slot}{ordinal}",
         "index": 0,
         "type": _KIND_TO_TYPE.get(kind, "action"),
@@ -239,6 +253,7 @@ def _visual_shot(
         },
         "transition": {"kind": "cut", "duration_s": 0.0, "note": None},
     }
+    return shot
 
 
 _KIND_LABEL = {

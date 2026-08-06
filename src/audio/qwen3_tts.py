@@ -117,6 +117,7 @@ def voice_records() -> List[Dict[str, Any]]:
             "dialect": None,
             "lang_primary": None,
             "origin": "system",
+            "description": profile["prompt"],
         }
         for voice_id, profile in VOICE_PROFILES.items()
     ]
