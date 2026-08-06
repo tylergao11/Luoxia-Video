@@ -415,6 +415,29 @@ def _check_coverage(
                         invariant=21,
                     )
                 )
+            visible_characters = visual.get("characters") or []
+            for cid in visible_characters:
+                if cid not in cast_ids:
+                    issues.append(
+                        BeatsIssue(
+                            code="unknown_character",
+                            message=f"visuals[{n - 1}].characters contains '{cid}' not in cast",
+                            beat_id=bid,
+                            invariant=21,
+                        )
+                    )
+            if visual.get("kind") == "reaction" and visible_characters not in ([], [subject]):
+                issues.append(
+                    BeatsIssue(
+                        code="reaction_has_extra_characters",
+                        message=(
+                            f"visuals[{n - 1}] is a reaction shot; characters must contain "
+                            "only its subject"
+                        ),
+                        beat_id=bid,
+                        invariant=21,
+                    )
+                )
 
         # Budget is only meaningful once decisions exist; a draft may still be oversized.
         if selected and beat.get("decision") in RETAINED:

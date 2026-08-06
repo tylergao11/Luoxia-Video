@@ -1,0 +1,27 @@
+{
+  "model": "grok-imagine-video-1.5",
+  "resolution": "720p",
+  "shots": [
+    {
+      "id": "01_charge_release",
+      "duration": 3,
+      "image": "output/doupo_fury_lotus_10s/stills/01_charge_release.png",
+      "output": "output/doupo_fury_lotus_10s/shots/01_charge_release.mp4",
+      "prompt": "A spectacular Chinese fantasy battle shot with native cinematic sound. Preserve Xiao Yan's exact face, black-and-gold costume, anatomy, battlefield and the sharply readable two-colored flame lotus from the first frame. The sapphire-blue petals and crimson-gold petals counter-rotate faster while the white-hot core compresses and bends the surrounding air. Xiao Yan's hair and robe whip backward under the pressure. He glares at the distant enemy and shouts exactly once in forceful natural Mandarin: \"佛怒火莲！\" Immediately after the shout, he drives both palms forward and launches the intact lotus straight toward the enemy. A circular pressure wave erupts from his hands, dust and stones burst away, and the camera performs a fast controlled arc around him before snapping into the launch direction. The lotus must leave his hands cleanly and remain one coherent projectile. Premium blockbuster VFX, intense blue-orange lighting, strong recoil, dynamic but readable action, no slow motion. Audio: escalating energy whine, deep flame roar, one powerful Mandarin shout, heavy launch boom. No narrator, no other dialogue, no subtitles, no text, no watermark, no gore."
+    },
+    {
+      "id": "02_flight_tracking",
+      "duration": 3,
+      "image": "output/doupo_fury_lotus_10s/stills/02_flight_tracking.png",
+      "output": "output/doupo_fury_lotus_10s/shots/02_flight_tracking.mp4",
+      "prompt": "A single continuous ultra-fast projectile tracking shot in the same shattered twilight battlefield. Preserve the exact spatial layout, Xiao Yan silhouette, distant armored enemy and one coherent sapphire-blue and crimson-gold flame lotus from the first frame. The flame lotus accelerates violently away from Xiao Yan and races just above the cracked ground toward the enemy. The camera dives behind and slightly beside the projectile, tracking it at extreme speed while keeping the lotus petals sharply readable. Blue and orange flame trails twist into a double helix; expanding pressure rings pulverize loose stone; the ground beneath cracks in a moving line; heat distortion bends the distant ruins. The enemy braces, raises an energy defense and becomes rapidly larger in frame. End at the instant immediately before contact, with the lotus filling the foreground and the target centered behind it. No detonation yet. Premium blockbuster Chinese fantasy VFX, aggressive parallax, speed ramp, controlled camera shake, no random cuts, no extra projectiles. Audio: violent rushing flame, crackling energy, two sharp sonic booms, rising bass pressure. No speech, no narrator, no subtitles, no text, no watermark, no gore."
+    },
+    {
+      "id": "03_impact_explosion",
+      "duration": 4,
+      "image": "output/doupo_fury_lotus_10s/stills/03_impact_explosion.png",
+      "output": "output/doupo_fury_lotus_10s/shots/03_impact_explosion.mp4",
+      "prompt": "The climactic impact of a Chinese fantasy blockbuster battle. Begin at the exact detonation represented by the first frame. The white-hot lotus core flashes with overwhelming brightness, then the enormous sapphire-blue and crimson-gold flame petals expand outward in concentric layers. A perfectly visible spherical shockwave races across the battlefield, shattering stone terraces into radial fractures and lifting huge slabs and dust. The camera is struck by the pressure wave and thrown rapidly backward with strong but controlled shake. Storm clouds split open above; blue lightning-like filaments and crimson fire pillars spiral upward; the distant mountains light up. The armored enemy silhouette is swallowed by light without gore. Xiao Yan remains a small stable silhouette far from the blast, braced against the expanding wind. During the final second, reveal the gigantic burning lotus-shaped energy cloud and expanding dust ring so the scale is unmistakable. Premium crisp VFX, massive scale, deep contrast, volumetric smoke, physically coherent debris, not an abstract wall of fire. Audio: one colossal layered detonation, sub-bass shockwave, rock fracture, debris rain, then a brief high-frequency ringing and deep rumble. No speech, no narrator, no music, no subtitles, no text, no watermark, no gore."
+    }
+  ]
+}

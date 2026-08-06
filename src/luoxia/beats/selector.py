@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +32,98 @@ LINE_OVERHEAD_S = 0.8
 
 class SelectionError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class SelectionPreparation:
+    """Narrative selection result before voice and visual direction are attached."""
+
+    counts: Dict[str, int]
+    rescued: List[str]
+    trimmed: List[str]
+
+
+def prepare_selection(
+    beats_doc: Dict[str, Any],
+    *,
+    plan: bool = True,
+    defer_payload: bool = True,
+) -> SelectionPreparation:
+    """Choose story beats and compress dialogue without locking downstream direction.
+
+    The language agent owns these decisions.  Voice performance and visual coverage are
+    deliberately absent at this point, so they cannot influence which novel material is
+    kept.  `finalize_selection` locks the shared beats document after those two agents
+    have attached their directions.
+    """
+    if beats_doc.get("phase") == "delivered":
+        raise SelectionError(
+            "beats already delivered; re-running selection would invalidate the timeline"
+        )
+
+    counts = apply_thresholds(beats_doc)
+    # A language-only pass may intentionally leave a retained action beat silent.
+    # The visual agent attaches filmable coverage before finalization, so payload is
+    # checked at the shared-contract lock instead of prematurely here.
+    rescued = repair_dependencies(beats_doc, require_payload=not defer_payload)
+    if not defer_payload:
+        ensure_retained_payload(beats_doc)
+    for beat in beats_doc.get("beats") or []:
+        beat["script_char_count"] = script_char_count(beat)
+    if plan:
+        plan_episodes(beats_doc)
+    trimmed = _enforce_compression_budget(beats_doc)
+    return SelectionPreparation(counts=counts, rescued=rescued, trimmed=trimmed)
+
+
+def finalize_selection(
+    beats_doc: Dict[str, Any],
+    *,
+    preparation: Optional[SelectionPreparation] = None,
+    actor: str = "selector:threshold",
+    now: Optional[datetime] = None,
+    max_repair_severity: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Validate payload, enforce coverage budget and lock the one beats truth."""
+    prepared = preparation or SelectionPreparation(counts={}, rescued=[], trimmed=[])
+    ensure_retained_payload(beats_doc)
+    cut_shots = _enforce_coverage_budget(beats_doc)
+
+    for beat in beats_doc.get("beats") or []:
+        beat["script_char_count"] = script_char_count(beat)
+
+    stats = compute_selection_stats(beats_doc)
+    beats_doc["selection"] = stats
+    beats_doc["quality"] = repair_log.summarize(beats_doc)
+    beats_doc["phase"] = "selected"
+    beats_doc["selected_at"] = (now or datetime.now(timezone.utc)).isoformat()
+    beats_doc["beats_hash"] = compute_beats_hash(beats_doc)
+
+    detail = (
+        f"keep={stats['kept']} compress={stats['compressed']} drop={stats['dropped']}, "
+        f"{stats['total_script_chars']}/{stats['total_source_chars']} chars "
+        f"(ratio {stats['compression_ratio']:.4f}, drop_rate {stats['drop_rate']:.4f})"
+    )
+    if prepared.rescued:
+        detail += f"; rescued setups: {', '.join(prepared.rescued)}"
+    if prepared.trimmed:
+        detail += f"; auto-trimmed lines on {len(set(prepared.trimmed))} beat(s)"
+    if cut_shots:
+        detail += f"; auto-trimmed coverage on {len(set(cut_shots))} beat(s)"
+    q = beats_doc["quality"]
+    detail += f"; repairs={q['repair_count']} (worst={q['worst_severity'] or 'none'})"
+    beats_doc.setdefault("audit", []).append(
+        {
+            "at": beats_doc["selected_at"],
+            "actor": actor,
+            "action": "select",
+            "detail": detail,
+        }
+    )
+    validate_beats(beats_doc)
+    if max_repair_severity:
+        repair_log.enforce(beats_doc, max_severity=max_repair_severity)
+    return beats_doc
 
 
 def estimate_beat_duration_s(beat: Dict[str, Any]) -> float:
@@ -81,7 +174,11 @@ def apply_thresholds(beats_doc: Dict[str, Any]) -> Dict[str, int]:
     return changed
 
 
-def repair_dependencies(beats_doc: Dict[str, Any]) -> List[str]:
+def repair_dependencies(
+    beats_doc: Dict[str, Any],
+    *,
+    require_payload: bool = True,
+) -> List[str]:
     """Rescue setups that a kept payoff still needs. Returns the beat_ids that were upgraded."""
     beats = beats_doc.get("beats") or []
     by_id = {b.get("beat_id"): b for b in beats}
@@ -111,7 +208,7 @@ def repair_dependencies(beats_doc: Dict[str, Any]) -> List[str]:
             dep["drop_reason"] = None
             dep["merged_into"] = None
             rescued.append(dep.get("beat_id"))
-            if not (dep.get("lines") or coverage_visuals(dep)):
+            if require_payload and not (dep.get("lines") or coverage_visuals(dep)):
                 raise SelectionError(
                     f"{dep.get('beat_id')} must be retained for {payoff_id} but has no lines or visual to show"
                 )
@@ -294,55 +391,14 @@ def select_beats(
     whose dialogue the harness had to invent or cut mid-thought. Default is no gate, so
     callers can inspect `beats_doc["quality"]` and decide for themselves.
     """
-    if beats_doc.get("phase") == "delivered":
-        raise SelectionError("beats already delivered; re-running selection would invalidate the timeline")
-
-    counts = apply_thresholds(beats_doc)
-    rescued = repair_dependencies(beats_doc)
-    ensure_retained_payload(beats_doc)
-    cut_shots = _enforce_coverage_budget(beats_doc)
-
-    for beat in beats_doc.get("beats") or []:
-        beat["script_char_count"] = script_char_count(beat)
-
-    if plan:
-        plan_episodes(beats_doc)
-
-    trimmed = _enforce_compression_budget(beats_doc)
-
-    stats = compute_selection_stats(beats_doc)
-    beats_doc["selection"] = stats
-    beats_doc["quality"] = repair_log.summarize(beats_doc)
-    beats_doc["phase"] = "selected"
-    beats_doc["selected_at"] = (now or datetime.now(timezone.utc)).isoformat()
-    beats_doc["beats_hash"] = compute_beats_hash(beats_doc)
-
-    detail = (
-        f"keep={stats['kept']} compress={stats['compressed']} drop={stats['dropped']}, "
-        f"{stats['total_script_chars']}/{stats['total_source_chars']} chars "
-        f"(ratio {stats['compression_ratio']:.4f}, drop_rate {stats['drop_rate']:.4f})"
+    prepared = prepare_selection(beats_doc, plan=plan, defer_payload=False)
+    return finalize_selection(
+        beats_doc,
+        preparation=prepared,
+        actor=actor,
+        now=now,
+        max_repair_severity=max_repair_severity,
     )
-    if rescued:
-        detail += f"; rescued setups: {', '.join(rescued)}"
-    if trimmed:
-        detail += f"; auto-trimmed lines on {len(set(trimmed))} beat(s)"
-    if cut_shots:
-        detail += f"; auto-trimmed coverage on {len(set(cut_shots))} beat(s)"
-    q = beats_doc["quality"]
-    detail += f"; repairs={q['repair_count']} (worst={q['worst_severity'] or 'none'})"
-    beats_doc.setdefault("audit", []).append(
-        {
-            "at": beats_doc["selected_at"],
-            "actor": actor,
-            "action": "select",
-            "detail": detail,
-        }
-    )
-    validate_beats(beats_doc)
-    if max_repair_severity:
-        repair_log.enforce(beats_doc, max_severity=max_repair_severity)
-    _ = counts
-    return beats_doc
 
 
 # Which silent shot to sacrifice first when a beat exceeds its coverage budget.

@@ -1,0 +1,43 @@
+{
+  "provider": "doubao",
+  "model": "seed-tts-2.0",
+  "take_id": "doupo-moyan-30s-v1",
+  "takes": [
+    {
+      "id": "nalan_break",
+      "role": "纳兰嫣然",
+      "text": "萧炎，你我早已不是一个世界的人。这婚约，今日作废。",
+      "voice": "zh_female_gaolengyujie_uranus_bigtts",
+      "path": "output/doupo_moyan_30s/audio/nalan_break.wav",
+      "duration_s": 5.51,
+      "content_sha256": "sha256:2d56eb16f0f68875962c4eed2f619f60eb6b1fb864e7425544b5a31ed1253e39"
+    },
+    {
+      "id": "clan_mock",
+      "role": "萧家族人",
+      "text": "一个废物，也配得上云岚宗？",
+      "voice": "saturn_zh_male_aomanshaoye_tob",
+      "path": "output/doupo_moyan_30s/audio/clan_mock.wav",
+      "duration_s": 2.8,
+      "content_sha256": "sha256:a5b5df8f2da872963fe16cc1e21bc4d6970873d644a0da1b81fe3ca5ec9cd899"
+    },
+    {
+      "id": "xiao_declare",
+      "role": "萧炎",
+      "text": "纳兰小姐，看在纳兰老爷子的面上，萧炎奉劝你几句话——三十年河东，三十年河西，莫欺少年穷！",
+      "voice": "zh_male_qingcang_uranus_bigtts",
+      "path": "output/doupo_moyan_30s/audio/xiao_declare.wav",
+      "duration_s": 9.55,
+      "content_sha256": "sha256:e8c99b46604beb508e186b305f2761108ff54737d629aeba2aff76c2f112c3fd"
+    },
+    {
+      "id": "xiao_vow",
+      "role": "萧炎",
+      "text": "今日之辱，三年之后，我萧炎亲自奉还！",
+      "voice": "zh_male_qingcang_uranus_bigtts",
+      "path": "output/doupo_moyan_30s/audio/xiao_vow.wav",
+      "duration_s": 4.08,
+      "content_sha256": "sha256:0e9df142d51a31dae3aa18e2a6edb421c4e66c3458e7a00a8ad28bfbe5c57628"
+    }
+  ]
+}

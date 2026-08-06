@@ -1,0 +1,42 @@
+{
+  "provider": "doubao",
+  "resource_id": "seed-tts-2.0",
+  "voice_id": "saturn_zh_male_bujiqingnian_tob",
+  "section_id": "1795ce4e-3b3e-442f-8dfb-9900b63ab6c8",
+  "canonical_text": "纳兰小姐，看在纳兰老爷子的面上，萧炎奉劝你几句话——三十年河东，三十年河西，莫欺少年穷！",
+  "canonical_text_preserved": true,
+  "controlled_change": "voice_id_only",
+  "source_manifest": "output\\doupo_moyan\\audio\\doubao_qingcang_directed_parts\\manifest.json",
+  "segments": [
+    {
+      "index": 1,
+      "text": "纳兰小姐，看在纳兰老爷子的面上，萧炎奉劝你几句话——",
+      "context_text": "你是二十岁的萧炎，刚被人当众退婚羞辱。看着纳兰嫣然，强忍怒火，冷硬克制地当面对话；自然说，不要朗诵，不要预告片腔。",
+      "speech_rate": -2,
+      "loudness_rate": -4,
+      "pcm_bytes": 287430,
+      "log_id": "20260805155643F9D84A713DD64661E774",
+      "wav": "output\\doupo_moyan\\audio\\doubao_buji_directed_parts\\section_1_raw.wav"
+    },
+    {
+      "index": 2,
+      "text": "三十年河东，三十年河西，",
+      "context_text": "承接上一句，同一个人物同一口气。怒意开始压不住，语气加快加重；把“三十年河东，三十年河西”连贯推出，不要四字一顿，不要喊口号。",
+      "speech_rate": 4,
+      "loudness_rate": 4,
+      "pcm_bytes": 158214,
+      "log_id": "20260805155646485E12F6B5B1786547F5",
+      "wav": "output\\doupo_moyan\\audio\\doubao_buji_directed_parts\\section_2_raw.wav"
+    },
+    {
+      "index": 3,
+      "text": "莫欺少年穷！",
+      "context_text": "承接前两句，屈辱终于爆开。最后六个字咬住字头，短、狠、坚定地砸向对方；提高力度但不要拖长咆哮，收尾立刻切断。",
+      "speech_rate": 8,
+      "loudness_rate": 12,
+      "pcm_bytes": 89026,
+      "log_id": "202608051556486777300EA048C23DE3CE",
+      "wav": "output\\doupo_moyan\\audio\\doubao_buji_directed_parts\\section_3_raw.wav"
+    }
+  ]
+}

@@ -59,6 +59,81 @@ ANALYZE_SYSTEM = """你是短剧改编总监。原文已按段落编号给你，
 beat_type 只能是：face_slap, reversal, identity_reveal, power_up, emotional_peak, conflict_escalation, hook, setup, filler。
 """
 
+# The production orchestrator uses this narrower prompt.  It prevents the adaptation
+# pass from becoming a second visual/voice truth: this agent chooses story and wording,
+# while the dedicated agents attach appearance, coverage, casting and performance later.
+LANGUAGE_ANALYZE_SYSTEM = """你是短剧爆点改编总导演。原文已按段落编号给你。你的唯一职责是决定故事保留什么、删除什么、怎样重排成有钩子和爆点的短剧，并把书面叙述改成锋利口语。
+
+硬规则：
+1. 定位只用段落号。每个 beat 给 para_start 和 para_end（闭区间），禁止输出字符偏移。
+2. beat 按原文顺序、不重叠；纯环境、重复交代和无效流程标 filler、低强度。
+3. 打脸、反转和身份揭晓必须用 depends_on 指向让它成立的铺垫。
+4. lines 只写角色与最终台词。纯动作 beat 可以没有台词，由视觉 Agent 接手。
+5. 第一集开头十秒必须见冲突；最后一个 beat 必须是 hook，并写清观众还想知道的问题。
+6. 你不负责视觉：禁止输出 appearance、shot_size、visual、visuals、镜头、构图、动作时长。
+7. 你不负责声音：禁止输出 voice_id、delivery、performance、语气、音色、停顿或重音。
+8. character_id 只用小写字母、数字和下划线。
+9. 只输出一个 JSON 对象，不要解释。
+
+强度锚点：
+- 0-2：没有冲突或新信息。
+- 3-4：必要交代，但没有对抗。
+- 5-6：有摩擦或试探，尚未翻面。
+- 7-8：正面对抗、决裂、明确反转。
+- 9-10：全剧级秘密、生死或终极反杀。
+
+beat_type 只能是：face_slap, reversal, identity_reveal, power_up, emotional_peak, conflict_escalation, hook, setup, filler。
+"""
+
+LANGUAGE_ANALYZE_USER_TEMPLATE = """作品 work_id={work_id}
+标题={title}
+
+已编号的原文段落（本批为第 {chunk_no}/{chunk_total} 批，段落号 {para_lo}–{para_hi}）：
+-----
+{numbered}
+-----
+{carryover}
+输出 JSON：
+{{
+  "title": "作品标题",
+  "cast": [
+    {{
+      "character_id": "xiao_yan",
+      "display_name": "萧炎",
+      "role": "protagonist",
+      "aliases": ["炎儿"]
+    }}
+  ],
+  "beats": [
+    {{
+      "beat_id": "b001",
+      "para_start": 0,
+      "para_end": 2,
+      "summary": "一句话说明冲突或信息变化",
+      "beat_type": "conflict_escalation",
+      "intensity": 7.5,
+      "depends_on": [],
+      "scene_id": "scene_clan_hall",
+      "lines": [
+        {{
+          "character_id": "xiao_yan",
+          "text": "三十年河东，三十年河西，莫欺少年穷！",
+          "line_type": "dialogue"
+        }}
+      ],
+      "cliffhanger": null
+    }}
+  ]
+}}
+
+注意：
+- para_start/para_end 必须落在 {para_lo}–{para_hi} 内，逐个递增且不重叠。
+- beat_id 使用 b001、b002……连续编号。
+- lines.text 是最终语言真相，后续 Agent 只能给它加视觉或表演指令，不能擅自改字。
+- 不输出 decision；程序会根据强度、依赖和预算统一决定 keep/compress/drop。
+- 不输出任何视觉字段或声音字段。
+"""
+
 ANALYZE_USER_TEMPLATE = """作品 work_id={work_id}
 标题={title}
 
@@ -172,7 +247,7 @@ STILL_PROMPT_SYSTEM = """你是横屏AI漫剧美术指导。把镜头意图改�
 - 精致3D CGI / 锋利骨相 / 窄长眼冷高光 / 瓷光无毛孔 / 高材质密度（发丝·布料）/ 戏剧体积光 / 成年向美型（非幼态Q版）
 - 禁止：真人写真、毛孔写实、幼态大圆眼、Q版圆脸、2D赛璐璐厚线稿
 
-其它要求：写清人物外貌与服装、景别、光线、构图、情绪（愤怒/不甘等用表情与肢体写出来，不要只写台词）；16:9 横屏，横向构图留出左右空间；不要字幕文字；不要镜头运动词。
+其它要求：写清人物外貌与服装、景别、光线、构图、情绪（愤怒/不甘等用表情与肢体写出来，不要只写台词）；16:9 横屏，横向构图留出左右空间；不要字幕文字；不要镜头运动词。动作镜头选择主动作即将开始、人物关系和发力方向都清楚的起始瞬间，不要把高潮或结果提前画进静帧。
 只输出一个 JSON：{{"prompt":"...", "negative_prompt":"..."}}"""
 
 STILL_PROMPT_USER = """角色设定：
@@ -188,5 +263,14 @@ STILL_PROMPT_USER = """角色设定：
 
 写一张可直接送进文生图模型的静帧提示词。"""
 
-VIDEO_MOTION_SYSTEM = """你是短剧动态提示词写手。根据静帧内容写 1-2 句镜头运动/微动作提示（中文），适合图生视频。
-只输出 JSON：{{"prompt":"..."}}。不要对白，不要切镜。"""
+VIDEO_MOTION_SYSTEM = """你是短剧镜头运动导演。根据静帧、镜头类型和已经锁定的准确时长，写可直接送进图生视频模型的中文动态提示词。
+
+硬规则：
+1. 每个任务是一段独立、完整、连续的电影镜头；它可以在一个镜头内完成起势、加速、结果和短暂余韵。
+2. 使用给定 target_duration_s，把时长写成有轻重的内部节奏：建立、动作峰值、结果各占多少秒必须清楚，峰值不能平均摊满全程。
+3. 用正向、可见的动作写完整动作弧。先写脚步、重心、髋肩、手臂、视线、受力和回震，再写能量、烟尘、碎石、冲击波等效果；人物动作要先于特效成立。
+4. dialogue/narration 镜头以中景可读表演为主：说话者有与语气一致的连续表情和肢体变化，画面内其他人物也有克制但可见的反应。
+5. reaction 镜头呈现一个完整的表情转折；insert 镜头呈现关键物体或能量的明确变化；transition 镜头建立空间或时间变化。
+6. 保持静帧中的人物身份、服装、场景和构图方向；镜头运动由动作和情绪驱动，并让主动作始终可读。
+7. 成片保持单镜头、无切镜、无对白、无字幕。只输出 JSON：{{"prompt":"..."}}。
+"""

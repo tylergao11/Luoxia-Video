@@ -1,0 +1,19 @@
+{
+  "source_manifest": "../doubao_buji_directed_parts/manifest.json",
+  "voice_id": "saturn_zh_male_bujiqingnian_tob",
+  "change": "stable_attitude_two_beat_prompt",
+  "segments": [
+    {
+      "source_indices": [1],
+      "speech_rate": -2,
+      "loudness_rate": -4,
+      "context_text": "字面上的礼貌只是给纳兰老爷子面子，真实动作是冷冷警告纳兰嫣然。萧炎年轻、傲、不服，怒火压在字后，目光一直压着她说完。"
+    },
+    {
+      "source_indices": [2, 3],
+      "speech_rate": 5,
+      "loudness_rate": 6,
+      "context_text": "延续同一种年轻、嚣张、不服输的态度。前两句带着笃定自己必会翻身的傲气，气势在一口气里逐步顶高；最后六字顺着这股气自然达到峰值，短、狠、立刻收断，声线和态度始终不变。"
+    }
+  ]
+}

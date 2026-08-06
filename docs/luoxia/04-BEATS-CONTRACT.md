@@ -250,6 +250,8 @@ selector 会自动修复第一条：发现保留段落的依赖被判丢弃，�
 
 `reaction` 强制要求 `subject`，因为不指定是谁的脸，这个镜头既没法出图也没法用定妆图锁脸。桥接时反应镜头的 `characters` **只**放 `subject` 一个人——反应镜头里出现两个人就不是反应镜头了。反应/插入镜头的默认时长是 1.5 秒而不是 `default_action_duration_s`（4 秒），4 秒的反应镜头会把节奏彻底拖垮。
 
+`1.3.0` 允许每个 `visuals[]` 显式声明实际可见的 `characters`。一个 visual 就是一次独立的视频生成，也是一个完整电影镜头；复杂场面应拆成少量不同机位的完整镜头，再由 assembler 按顺序组合，而不是把一个人体动作切成微小状态片段。
+
 ### 镜头预算：覆盖是要花钱的
 
 每多一个镜头 = 多一次静帧生成 + 多一次视频生成。所以 `global.coverage` 按强度分配总镜头数（台词镜头 + `visuals` 一起算）：
@@ -285,6 +287,7 @@ selector 会自动修复第一条：发现保留段落的依赖被判丢弃，�
 `build_timeline_draft(beats_doc, episode_id)` 把一集展开成镜头：
 
 - `visuals[]` 按 `after_line` **交织**进台词序列，每个 → 一个 `timing_driver=rhythm` 的镜头，`shot_id` 后缀 `_v<slot><序号>` 标明它插在哪
+- `visuals[].characters` 原样进入对应 timeline shot；每个 visual 都是独立 shot、独立云端生成任务
 - 每条 `line` → 一个 `timing_driver=audio` 的镜头，`delivery` 写进 `dialogue.emotion`，规范化后的 `performance` 写进 `dialogue.performance`
 - `kind` 映射成 timeline 的 `shots[].type`（`reaction` / `insert` / `action`，`establishing` 在无台词段落记作 `transition`），这样人工审片时一眼能看出镜头调度
 - 所有镜头默认 `transition.kind=cut`：正反打叠化会读成时间跳跃，反应镜头必须硬切

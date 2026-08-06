@@ -10,10 +10,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.audio.doubao_tts import DoubaoTTS, VOICES as DOUBAO_VOICES
+from src.audio.doubao_tts import voice_records as doubao_voice_records
 from src.audio.doubao_tts import voices_for_gender as doubao_voices_for_gender
 from src.audio.qwen3_tts import Qwen3TTS, VOICE_PROFILES as QWEN3_VOICES
+from src.audio.qwen3_tts import voice_records as qwen3_voice_records
 from src.audio.qwen3_tts import voices_for_gender as qwen3_voices_for_gender
 from src.audio.xai_tts import XaiTTS, VOICES as XAI_VOICES
+from src.audio.xai_tts import voice_records as xai_voice_records
 from src.audio.xai_tts import voices_for_gender as xai_voices_for_gender
 
 
@@ -77,6 +80,16 @@ def voices_for_gender(gender: Optional[str]) -> List[str]:
     if provider == "qwen3":
         return qwen3_voices_for_gender(gender)
     return xai_voices_for_gender(gender)
+
+
+def configured_voice_records() -> List[Dict[str, Any]]:
+    """Casting metadata from the same provider catalog synthesis will validate."""
+    provider = configured_tts_provider()
+    if provider == "doubao":
+        return doubao_voice_records()
+    if provider == "qwen3":
+        return qwen3_voice_records()
+    return xai_voice_records()
 
 
 def make_tts_synthesize(

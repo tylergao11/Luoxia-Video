@@ -6,23 +6,15 @@ from typing import Any, Callable, Dict, Optional
 
 from src.luoxia.beats.analyzer import analyze_novel, analyze_novel_file
 from src.luoxia.beats.io import load_beats, save_beats
-from src.luoxia.beats.selector import select_beats
-from src.luoxia.beats.to_timeline import build_timeline_draft
 from src.luoxia.beats.validator import validate_beats
 from src.luoxia.compose.assembler import assemble_episode
 from src.luoxia.env import load_env_once
 from src.luoxia.llm.client import LuoxiaLLM
 from src.luoxia.lipsync.runner import apply_lipsync
+from src.luoxia.orchestration import ProductionOrchestrator
 from src.luoxia.paths import beats_path, timeline_frozen_path, timeline_path
-from src.luoxia.render.runner import render_timeline_videos
-from src.luoxia.rewrite import make_rewrite_fn
-from src.luoxia.stills.characters import ensure_character_sheets
-from src.luoxia.stills.prompts import polish_timeline_prompts
-from src.luoxia.stills.runner import render_timeline_stills
 from src.luoxia.timeline.freeze import freeze_timeline
 from src.luoxia.timeline.io import load_timeline, save_timeline
-from src.luoxia.timeline.solver import solve_timeline
-from src.luoxia.timeline.validator import validate_timeline
 
 
 @dataclass
@@ -54,10 +46,10 @@ def run_from_novel(
     on_step: Optional[Callable[[str, Dict[str, Any]], None]] = None,
     render_videos: Optional[Callable[..., Any]] = None,
 ) -> RunResult:
-    """Full audio-first pipeline: novel → beats → timeline → audio → stills → video → final.mp4.
+    """Three-agent audio-first pipeline ending in deterministic assembly.
 
     Requires:
-      - the local Qwen3-TTS VoiceDesign runtime for dialogue
+      - the configured dialogue provider (Doubao Seed-TTS 2.0 by default)
       - the local MuseTalk 1.5 runtime for required dialogue close-ups
       - resolvable xAI credentials for LLM + stills + video: either session login
         (subscription pool) or LUOXIA_AUTH_MODE=api_key with XAI_API_KEY
@@ -75,6 +67,7 @@ def run_from_novel(
     text = novel_path.read_text(encoding="utf-8")
     wid = work_id or novel_path.stem.replace(" ", "_")
     llm = LuoxiaLLM()
+    orchestrator = ProductionOrchestrator.default(llm=llm)
 
     def note(step: str, **extra):
         if on_step:
@@ -87,21 +80,23 @@ def run_from_novel(
         note("beats_resume", path=str(bpath), phase=doc.get("phase"))
     else:
         note("analyze", chars=len(text))
-        doc = analyze_novel(
+        doc = orchestrator.language.adapt(
             text,
             work_id=wid,
             title=title or novel_path.stem,
             source_uri=str(novel_path),
-            llm=llm,
             global_overrides=beats_overrides,
         )
         save_beats(bpath, doc)
 
-    # --- 2. select ---
+    # --- 2. language selection + voice direction + visual direction ---
     if doc.get("phase") in {"draft", "scored"} or not doc.get("beats_hash"):
-        note("select")
+        note("direct_beats", agents=("language", "voice", "visual"))
         try:
-            select_beats(doc, actor="pipeline:run", max_repair_severity=max_repair_severity)
+            orchestrator.direct_existing_beats(
+                doc,
+                max_repair_severity=max_repair_severity,
+            )
         finally:
             # Persist even on a strict refusal so the ledger is inspectable.
             save_beats(bpath, doc)
@@ -120,7 +115,10 @@ def run_from_novel(
         )
         if needs_sheet:
             note("character_sheets", cast=len(doc["cast"]))
-            ensure_character_sheets(doc["cast"], output_root=root / wid)
+            orchestrator.visual.ensure_character_sheets(
+                doc["cast"],
+                output_root=root / wid,
+            )
             save_beats(bpath, doc)
 
     # --- 3. pick episode ---
@@ -130,7 +128,8 @@ def run_from_novel(
     if episode_id:
         ep = next((e for e in episodes if e["episode_id"] == episode_id), None)
         if ep is None:
-            raise RuntimeError(f"episode_id={episode_id} not in {[e['episode_id'] for e in episodes]}")
+            known = [item["episode_id"] for item in episodes]
+            raise RuntimeError(f"episode_id={episode_id} not in {known}")
     else:
         ep = next((e for e in episodes if e.get("episode_no") == episode_no), episodes[0])
     eid = ep["episode_id"]
@@ -144,7 +143,12 @@ def run_from_novel(
         note("timeline_resume", phase=tl.get("phase"))
     else:
         note("bridge")
-        tl = build_timeline_draft(doc, eid, provider=provider, model=model)
+        tl = orchestrator.build_timeline(
+            doc,
+            eid,
+            provider=provider,
+            model=model,
+        )
         tl.setdefault("cost", {})["budget_ceiling_usd"] = budget_usd
         save_timeline(tpath, tl)
         # mark beats delivered once a draft exists
@@ -152,22 +156,36 @@ def run_from_novel(
             doc["phase"] = "delivered"
             save_beats(bpath, doc)
 
-    # --- 5. polish prompts (cheap, before audio) ---
+    # --- 5. voice agent locks measured audio first ---
     if tl.get("phase") == "draft":
-        note("polish_prompts")
-        polish_timeline_prompts(tl, llm=llm)
-        save_timeline(tpath, tl)
+        note("voice_lock")
+        try:
+            orchestrator.lock_audio(tl, episode_dir=ep_root)
+        finally:
+            save_timeline(tpath, tl)
 
-    # --- 6. solve audio ---
-    if tl.get("phase") == "draft":
-        note("solve")
-        synthesize = _make_tts(ep_root, tl)
-        rewrite = make_rewrite_fn(llm)
-        solve_timeline(tl, synthesize=synthesize, rewrite=rewrite)
-        validate_timeline(tl)
-        save_timeline(tpath, tl)
+    # --- 6. visual agent now sees exact durations and owns motion + transitions ---
+    has_visual_direction = any(
+        item.get("actor") == "agent:visual"
+        and item.get("action") == "direct_timeline"
+        for item in (tl.get("audit") or [])
+    )
+    has_rendered_stills = any(
+        (shot.get("still") or {}).get("status") == "ready"
+        for shot in (tl.get("shots") or [])
+    )
+    if (
+        tl.get("phase") == "audio_locked"
+        and not has_visual_direction
+        and not has_rendered_stills
+    ):
+        note("visual_direction")
+        try:
+            orchestrator.visual.direct_timeline(tl)
+        finally:
+            save_timeline(tpath, tl)
 
-    # --- 7. stills ---
+    # --- 7. visual agent renders stills ---
     if tl.get("phase") == "audio_locked":
         missing_still = any(
             (s.get("still") or {}).get("status") != "ready"
@@ -176,7 +194,7 @@ def run_from_novel(
         )
         if missing_still:
             note("stills")
-            render_timeline_stills(tl, output_root=ep_root)
+            orchestrator.visual.render_stills(tl, output_root=ep_root)
             save_timeline(tpath, tl)
 
     # --- 8. freeze ---
@@ -188,11 +206,15 @@ def run_from_novel(
 
     # --- 9. video ---
     if tl.get("phase") in {"frozen", "rendering"}:
-        render = render_videos or render_timeline_videos
         if render_videos is None:
             assert_video_credentials()
         note("video_cloud")
-        render(tl, output_root=ep_root, timeline_path=tpath)
+        orchestrator.visual.render_videos(
+            tl,
+            output_root=ep_root,
+            timeline_path=tpath,
+            renderer=render_videos,
+        )
         save_timeline(tpath, tl)
 
     # --- 9b. audio-driven mouth pass ---
@@ -248,12 +270,6 @@ def assert_video_credentials() -> None:
             f"no video credential resolved (auth mode={st.mode}, provider={st.provider}): "
             f"{st.message}"
         )
-
-
-def _make_tts(episode_dir: Path, timeline: dict):
-    from src.luoxia.speech import make_tts_synthesize
-
-    return make_tts_synthesize(episode_dir, timeline)
 
 
 # Re-export for callers that import analyzer helpers from pipeline.
