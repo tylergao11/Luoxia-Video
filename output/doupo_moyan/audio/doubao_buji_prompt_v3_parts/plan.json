@@ -1,0 +1,11 @@
+{
+  "source_manifest": "../doubao_buji_directed_parts/manifest.json",
+  "voice_id": "saturn_zh_male_bujiqingnian_tob",
+  "change": "shared_acting_spine_prompt",
+  "shared_acting_spine": "这是被当众退婚后的近景对峙。萧炎从第一字起就压着屈辱和怒火，胸口绷紧、目光不移；三段是一口不断的情绪，冷怒逐步逼到爆发。",
+  "context_overrides": {
+    "1": "字面上仍给纳兰老爷子体面，真实意图是给纳兰嫣然最后警告。声音低、紧、硬，每次停顿都带着压迫感，不是日常寒暄。",
+    "2": "接住上一句的冷怒，克制开始裂开。不是背诵名句，而是在她面前立誓雪耻；两句越说越硬，把尚未落下的气势直接推向下一句。",
+    "3": "接住上一句尚未落下的气息，屈辱终于爆开。最后六个字咬住字头，短、狠、坚定地砸向她；爆完立即收断。"
+  }
+}

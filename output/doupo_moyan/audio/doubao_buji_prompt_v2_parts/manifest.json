@@ -1,0 +1,45 @@
+{
+  "provider": "doubao",
+  "resource_id": "seed-tts-2.0",
+  "voice_id": "saturn_zh_male_bujiqingnian_tob",
+  "section_id": "9267355d-064e-4a0a-88fd-18c200b2fa3d",
+  "canonical_text": "纳兰小姐，看在纳兰老爷子的面上，萧炎奉劝你几句话——三十年河东，三十年河西，莫欺少年穷！",
+  "canonical_text_preserved": true,
+  "controlled_change": "context_prompt_only",
+  "source_manifest": "output/doupo_moyan/audio/doubao_buji_directed_parts/manifest.json",
+  "segments": [
+    {
+      "index": 1,
+      "text": "纳兰小姐，看在纳兰老爷子的面上，萧炎奉劝你几句话——",
+      "context_text": "你刚被纳兰嫣然当众退婚。你非常愤怒，但为了纳兰老爷子的体面，你决定先给她最后一次警告。她就在你面前，你压着火直接对她说，不是在念旁白；‘纳兰小姐’之后不要故作停顿，整句话连贯、冷硬，仍然是年轻人的声音。",
+      "speech_rate": -2,
+      "loudness_rate": -4,
+      "pcm_bytes": 269656,
+      "log_id": "202608051600385691B1B5160D16D0C694",
+      "wav": "output\\doupo_moyan\\audio\\doubao_buji_prompt_v2_parts\\section_1_raw.wav",
+      "prompt_changed": true
+    },
+    {
+      "index": 2,
+      "text": "三十年河东，三十年河西，",
+      "context_text": "上一句说完，你已经不再客气。‘三十年河东，三十年河西’不是名句朗诵，而是你当面告诉她：今天的羞辱迟早会翻转。两半句连成一股气，越说越硬，末尾不要收住，把怒火直接顶到下一句。",
+      "speech_rate": 4,
+      "loudness_rate": 4,
+      "pcm_bytes": 169122,
+      "log_id": "2026080516004147920C7A63BFEFD04CE7",
+      "wav": "output\\doupo_moyan\\audio\\doubao_buji_prompt_v2_parts\\section_2_raw.wav",
+      "prompt_changed": true
+    },
+    {
+      "index": 3,
+      "text": "莫欺少年穷！",
+      "context_text": "承接前两句，屈辱终于爆开。最后六个字咬住字头，短、狠、坚定地砸向对方；提高力度但不要拖长咆哮，收尾立刻切断。",
+      "speech_rate": 8,
+      "loudness_rate": 12,
+      "pcm_bytes": 88850,
+      "log_id": "20260805160043F0CFFEC56BF81B03E688",
+      "wav": "output\\doupo_moyan\\audio\\doubao_buji_prompt_v2_parts\\section_3_raw.wav",
+      "prompt_changed": false
+    }
+  ]
+}

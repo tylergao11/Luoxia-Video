@@ -1,0 +1,7 @@
+provider=doubao
+model=seed-tts-2.0
+text=纳兰小姐，看在纳兰老爷子的面上，萧炎奉劝你几句话——三十年河东，三十年河西，莫欺少年穷！
+instructions=这是萧炎当面回击退婚，不是旁白。前半段克制而有礼，压着被羞辱的怒意；从“三十年河东”开始逐步抬高，但不要逐字用力；“莫欺少年穷”才短促、坚定地爆发。保持二十岁少年的血性，不要播音腔、老成腔或预告片腔。
+takes=zh_male_qingcang_uranus_bigtts,zh_male_ruyaqingnian_uranus_bigtts,saturn_zh_male_bujiqingnian_tob
+canonical_line_unchanged=true
+listen_all=output/doupo_moyan/audio/line_doubao_*.wav

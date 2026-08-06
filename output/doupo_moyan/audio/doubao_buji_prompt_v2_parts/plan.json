@@ -1,0 +1,9 @@
+{
+  "source_manifest": "../doubao_buji_directed_parts/manifest.json",
+  "voice_id": "saturn_zh_male_bujiqingnian_tob",
+  "change": "context_prompt_only",
+  "context_overrides": {
+    "1": "你刚被纳兰嫣然当众退婚。你非常愤怒，但为了纳兰老爷子的体面，你决定先给她最后一次警告。她就在你面前，你压着火直接对她说，不是在念旁白；‘纳兰小姐’之后不要故作停顿，整句话连贯、冷硬，仍然是年轻人的声音。",
+    "2": "上一句说完，你已经不再客气。‘三十年河东，三十年河西’不是名句朗诵，而是你当面告诉她：今天的羞辱迟早会翻转。两半句连成一股气，越说越硬，末尾不要收住，把怒火直接顶到下一句。"
+  }
+}
