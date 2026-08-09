@@ -1,8 +1,0 @@
-provider=xai
-primary_voice=orion
-duration_s=9.820
-tags=['<build-intensity>@0:44', '[pause]@dramatic-break']
-text=纳兰小姐，看在纳兰老爷子的面上，萧炎奉劝你几句话——三十年河东，三十年河西，莫欺少年穷！
-emotion=愤怒不甘决绝，先抑后扬，末四字加重
-takes=orion,leo,rex,sirius,atlas
-listen_all=output/doupo_moyan/audio/line_xai_*.wav

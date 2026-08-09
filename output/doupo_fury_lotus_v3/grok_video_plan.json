@@ -1,0 +1,76 @@
+{
+  "project": "doupo_fury_lotus_v3",
+  "model": "grok-imagine-video-1.5",
+  "resolution": "1080p",
+  "mode": "i2v",
+  "total_duration_s": 11,
+  "tempo_policy": {
+    "required_in_every_action_prompt": [
+      "REAL-TIME combat tempo",
+      "normal 1x physics",
+      "NO slow motion",
+      "NO bullet time",
+      "NO time dilation",
+      "NO dreamy float",
+      "NO balletic petal dance",
+      "NO lingering beauty holds",
+      "NO speed-ramp trailer pacing"
+    ],
+    "rationale": "Grok Imagine Video fills sparse long shots with slow beauty motion. Atomic short shots + explicit 1x tempo lock + ballistic projectile language."
+  },
+  "shots": [
+    {
+      "id": "01_compress",
+      "duration": 2,
+      "image": "output/doupo_fury_lotus_v3/stills/01_compress.png",
+      "output": "output/doupo_fury_lotus_v3/shots/01_compress.mp4",
+      "prompt": "TEMPO LOCK: REAL-TIME combat tempo, normal 1x physics, live-action fight VFX plate. NO slow motion, NO bullet time, NO time dilation, NO dreamy float, NO balletic petal dance, NO lingering beauty holds, NO speed-ramp trailer pacing. High action density: every 0.1s shows visible change.\n\nI2V from this exact still. Preserve exact faces, black-and-gold robe, armored enemy, ruined arena, and the coherent two-color flame lotus warhead.\n\nSTART: lotus open and unstable between both palms.\nEND (by 2.0s): lotus violently compressed into a denser, smaller, brighter white-hot core STILL held between hands; NOT launched.\n\nTiming:\n0.0-0.4s: fighter snaps both hands inward; petals slam shut like armor plates, not gently spinning for beauty.\n0.4-1.4s: continuous real-time compression — core brightens and shrinks, blue-orange light strobes faster, loose stones leap upward, sleeves and hair whip hard toward the core, ground dust races inward.\n1.4-2.0s: final squeeze lock; short snappy camera push-in (not slow dolly); distant enemy visibly tenses and raises shield higher.\n\nLotus is a compact warhead being pressurized, never a decorative flower show. Single continuous medium-wide shot, no cuts, no dialogue, no subtitles, no text, no watermark, no gore.\nNative SFX only: rising energy whine, stone rattle, compressed flame roar, brief vacuum hush at end."
+    },
+    {
+      "id": "02_launch",
+      "duration": 1,
+      "image": "output/doupo_fury_lotus_v3/stills/02_launch.png",
+      "output": "output/doupo_fury_lotus_v3/shots/02_launch.mp4",
+      "prompt": "TEMPO LOCK: REAL-TIME combat tempo, normal 1x physics. NO slow motion, NO bullet time, NO float, NO balletic motion, NO trailer speed-ramp. This is a ONE-SECOND violent release.\n\nI2V from this peak-launch still. Preserve exact characters, costumes, arena, and coherent blue-orange lotus. Animate the launch impulse and immediate separation around this pose — do not freeze into beauty float.\n\nSTART: palms thrusting, lotus just clearing the hands.\nEND (by 1.0s): intact lotus fully separated farther ahead left-to-right, accelerating as one ballistic projectile; hands empty with wider visible gap; stronger recoil and dust.\n\nTiming:\n0.00-0.12s: micro vacuum hold only (not slow-mo beauty).\n0.12-0.45s: full-body palm thrust SNAP — hips, shoulders, arms fire as one; hard recoil kicks torso back; circular pressure ring cracks stone; dust blasts backward.\n0.45-1.00s: lotus streaks away at real combat speed; camera does one snappy lateral whip into launch direction; enemy remains distant, no hit yet.\n\nMUST read as sudden and heavy, like a real martial arts release, not a floaty energy ball. No long flight, no impact, no explosion, no cuts, no dialogue, no text, no watermark.\nNative SFX: vacuum hush, launch crack, pressure boom, short whoosh."
+    },
+    {
+      "id": "03_flight",
+      "duration": 2,
+      "image": "output/doupo_fury_lotus_v3/stills/03_flight.png",
+      "output": "output/doupo_fury_lotus_v3/shots/03_flight.mp4",
+      "prompt": "TEMPO LOCK: REAL-TIME hypersonic combat tempo, continuous high velocity, normal 1x physics. NO slow motion, NO bullet time, NO dreamy float, NO decorative petal spin, NO speed-ramp that starts slow. Background may streak; the lotus stays sharp and FAST.\n\nI2V from this still. Preserve coherent blue-orange lotus warhead, ruined arena, distant black-robed fighter, armored enemy.\n\nSTART: lotus just departed, enemy far right.\nEND (by 2.0s): lotus stops a hand-width BEFORE the golden shield; enemy now large and readable, actively bracing. NO contact.\n\nTiming:\n0.0-1.4s: nonstop left-to-right ballistic travel just above cracked ground; twin flame trails form a tight helix; pressure rings kick dust sideways; ground crack line races forward; camera aggressive behind-and-beside track with strong parallax.\n1.4-2.0s: target grows rapidly in frame; enemy plants feet and flares shield; cut energy of motion into a hard pre-impact hold WITHOUT going soft or floaty.\n\nOne continuous pursuit shot, no internal cuts, no extra projectiles, no detonation, no dialogue, no text, no watermark.\nNative SFX: violent rush, two short sonic booms, rising sub-bass, cut to near-silence."
+    },
+    {
+      "id": "04_brace",
+      "duration": 1,
+      "image": "output/doupo_fury_lotus_v3/stills/04_preimpact.png",
+      "output": "output/doupo_fury_lotus_v3/shots/04_brace.mp4",
+      "prompt": "TEMPO LOCK: REAL-TIME reaction, snappy not slow. NO slow motion, NO lingering face beauty shot, NO dreamy hold.\n\nI2V from this pre-impact still. Preserve armored enemy, golden shield, incoming blue-orange lotus, distant fighter, arena.\n\nSTART: enemy alarmed but incomplete brace; lotus separated from shield.\nEND (by 1.0s): full defensive lock — eyes widen, jaw tightens, shoulders set, both feet drive into cracked ground, shield flares maximum brightness. Lotus NEVER touches shield.\n\nOnly event is the fear-to-defense body transition at real acting speed. Medium shot, very short snappy pullback, not a face close-up, no cuts, no dialogue, no text, no watermark.\nNative SFX: armor strain, shield hum spike, incoming flame hiss."
+    },
+    {
+      "id": "05_contact",
+      "duration": 1,
+      "image": "output/doupo_fury_lotus_v3/stills/05_contact.png",
+      "output": "output/doupo_fury_lotus_v3/shots/05_contact.mp4",
+      "prompt": "TEMPO LOCK: REAL-TIME impact violence. Allowed hit-stop is ONLY 1-2 frames, then IMMEDIATELY resume full real-time. NO slow-motion explosion, NO soft flower bloom, NO bullet-time orbit.\n\nI2V from this contact still. Preserve armored enemy, shield, attack direction, coherent lotus core, distant fighter.\n\nSTART: lotus a hair from fully raised shield.\nEND (by 1.0s): shield shattered radially, enemy thrown backward as one readable silhouette, compact blue-white impact core formed — NOT a giant mushroom cloud yet.\n\nTiming:\n0.00-0.15s: final close; micro expression of impact anticipation.\n0.15-0.25s: contact flash + 1-2 frame hit-stop only.\n0.25-1.00s: full-speed shield fracture, golden shards blast toward lens, body recoil, hard camera jolt.\n\nSingle continuous shot, no gore, no cuts, no dialogue, no text, no watermark.\nNative SFX: shield crack, concussive slam, fragment spray, brief ear-ring."
+    },
+    {
+      "id": "06_blast",
+      "duration": 2,
+      "image": "output/doupo_fury_lotus_v3/stills/05_contact.png",
+      "output": "output/doupo_fury_lotus_v3/shots/06_blast.mp4",
+      "prompt": "TEMPO LOCK: REAL-TIME catastrophic expansion. First half must be MUCH FASTER than normal fire. NO slow decorative lotus bloom, NO soft rising mushroom in slow motion, NO balletic flame tendrils.\n\nI2V continuity from impact language in this still. Preserve color script (blue core / orange shell), arena, distant black-robed fighter silhouette.\n\nSTART: compact ignited impact core.\nEND (by 2.0s): huge but readable spherical shockwave already crossed much of the arena; turbulent blue-orange blast cloud; debris in ballistic flight; camera kicked backward hard then wide enough to read scale.\n\nTiming:\n0.0-0.5s: violent radial expansion many times faster than campfire flame; one severe camera kick; shock front visible.\n0.5-1.4s: continuous high-energy growth, rock slabs lift and tumble at real gravity, dust wall races outward; rapid crane/dolly back for scale (fast, not gentle).\n1.4-2.0s: hold wide readable blast mass still churning — energy remains violent, not serene.\n\nNo restart of attack, no duplicate characters, no gore, no cuts, no dialogue, no text, no watermark.\nNative SFX: colossal layered detonation, sub-bass pressure, rock fracture."
+    },
+    {
+      "id": "07_aftermath",
+      "duration": 2,
+      "image": "output/doupo_fury_lotus_v3/stills/06_aftermath.png",
+      "output": "output/doupo_fury_lotus_v3/shots/07_aftermath.mp4",
+      "prompt": "TEMPO LOCK: real-time aftermath physics, not slow-mo beauty. Debris falls at normal gravity. NO dreamy slow ember ballet, NO frozen poetic hold for the whole shot.\n\nI2V from this wide aftermath still. Preserve molten crater, dust ring, ember rain, distant fighter silhouette, color grade.\n\nSTART: blast already large.\nEND (by 2.0s): shock energy settling, heavy debris still raining and bouncing, dust wall receding, fighter remains small stable silhouette, scale unmistakable.\n\nMotion: continuous settling chaos at real speed — collapsing terrace stone, turbulent smoke column, ember streaks, mild camera drift only after the violence is already established. Do not restart the detonation. No gore, no dialogue, no text, no watermark.\nNative SFX: debris rain, deep rumble, fading fire."
+    }
+  ],
+  "concat": {
+    "list_file": "output/doupo_fury_lotus_v3/concat.txt",
+    "output": "output/doupo_fury_lotus_v3/fury_lotus_v3_full.mp4"
+  }
+}
