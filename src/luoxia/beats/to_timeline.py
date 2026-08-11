@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from src.luoxia.beats.hashing import compute_beats_hash
 from src.luoxia.beats.validator import RETAINED
 from src.luoxia.speech import provider_for_voice
+from src.luoxia.timeline.video_policy import default_video_acceptance_policy
 
 DEFAULT_GLOBAL: Dict[str, Any] = {
     # grok-imagine-video delivers 24fps; declaring 25 only duplicates frames on encode.
@@ -46,7 +47,11 @@ def build_timeline_draft(
     by_id = {b.get("beat_id"): b for b in beats_doc.get("beats") or []}
     cast_by_id = {c.get("character_id"): c for c in beats_doc.get("cast") or []}
 
-    g = {**DEFAULT_GLOBAL, **(global_overrides or {})}
+    g = {
+        **DEFAULT_GLOBAL,
+        "video_acceptance": default_video_acceptance_policy(),
+        **(global_overrides or {}),
+    }
     shots: List[Dict[str, Any]] = []
     used_characters: set[str] = set()
 
@@ -121,7 +126,7 @@ def build_timeline_draft(
         shot["index"] = i
 
     return {
-        "schema_version": "1.2.0",
+        "schema_version": "1.3.0",
         "project_id": beats_doc.get("work_id"),
         "episode_id": episode_id,
         "title": episode.get("title") or beats_doc.get("title"),
@@ -242,6 +247,12 @@ def _visual_shot(
             "status": "pending",
             "provider": provider,
             "model": model,
+            "request": {"allow_slow_motion": False},
+            "acceptance": {
+                "status": "pending",
+                "checker": g["video_acceptance"]["checker"],
+                "reasons": [],
+            },
             "has_audio_track": False,
             "audio_stripped": False,
             "attempts": 0,
@@ -324,6 +335,12 @@ def _dialogue_shot(
             "status": "pending",
             "provider": provider,
             "model": model,
+            "request": {"allow_slow_motion": False},
+            "acceptance": {
+                "status": "pending",
+                "checker": g["video_acceptance"]["checker"],
+                "reasons": [],
+            },
             "has_audio_track": False,
             "audio_stripped": False,
             "attempts": 0,

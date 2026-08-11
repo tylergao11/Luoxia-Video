@@ -3,6 +3,7 @@ import time
 from typing import Dict, Any, List
 from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant
 from ...models.image import WanxImageModel
+from ...output_contract import OUTPUT
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 
@@ -12,7 +13,7 @@ class StoryboardGenerator:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
         self.model = WanxImageModel(self.config.get('model', {}))
-        self.output_dir = self.config.get('output_dir', 'output/storyboard')
+        self.output_dir = self.config.get('output_dir', str(OUTPUT.storyboard))
 
     def generate_storyboard(self, script: Any, characters: List[Character] = None, scenes: List[Scene] = None) -> Any:
         """Generates images for all frames in the storyboard.
@@ -104,7 +105,7 @@ class StoryboardGenerator:
                         if is_object_key(target_url):
                             asset_ref_paths.append(target_url)
                         else:
-                            potential_path = os.path.join("output", target_url)
+                            potential_path = os.path.join(OUTPUT.root, target_url)
                             if os.path.exists(potential_path):
                                 asset_ref_paths.append(os.path.abspath(potential_path))
                             elif os.path.exists(target_url):
@@ -124,7 +125,7 @@ class StoryboardGenerator:
                     if is_object_key(scene_url):
                         asset_ref_paths.append(scene_url)
                     else:
-                        potential_path = os.path.join("output", scene_url)
+                        potential_path = os.path.join(OUTPUT.root, scene_url)
                         if os.path.exists(potential_path):
                             asset_ref_paths.append(os.path.abspath(potential_path))
                         elif os.path.exists(scene_url):
@@ -182,7 +183,7 @@ class StoryboardGenerator:
                 self.model.generate(prompt, output_path, ref_image_paths=asset_ref_paths, size=effective_size, model_name=model_name)
                 
                 # Store relative path for frontend serving
-                rel_path = os.path.relpath(output_path, "output")
+                rel_path = os.path.relpath(output_path, OUTPUT.root)
                 
                 # Create Variant
                 variant = ImageVariant(
@@ -213,7 +214,7 @@ class StoryboardGenerator:
                     # Upload the selected variant
                     if selected_variant:
                         # Construct local path from relative path
-                        local_path = os.path.join("output", selected_variant.url)
+                        local_path = os.path.join(OUTPUT.root, selected_variant.url)
                         if os.path.exists(local_path):
                             # Upload and get Object Key (not full URL)
                             object_key = uploader.upload_file(

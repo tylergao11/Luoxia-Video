@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0, os.getcwd())
 
 from src.utils.oss_utils import is_object_key, OSSImageUploader, get_oss_base_path
+from src.output_contract import OUTPUT
 
 load_dotenv()
 
@@ -31,7 +32,7 @@ for val in test_values:
 
 # Check projects.json
 print("\nChecking projects.json for the specific key...")
-with open("output/projects.json", "r") as f:
+with open(OUTPUT.state / "projects.json", "r") as f:
     projects = json.load(f)
 
 found = False

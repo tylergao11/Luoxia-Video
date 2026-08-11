@@ -130,3 +130,32 @@ def measure_video_size(path: str | Path, *, ffprobe_path: Optional[str] = None) 
     if not streams or not streams[0].get("width") or not streams[0].get("height"):
         raise RuntimeError(f"ffprobe returned no video size for {media}")
     return int(streams[0]["width"]), int(streams[0]["height"])
+
+
+def has_audio_stream(path: str | Path, *, ffprobe_path: Optional[str] = None) -> bool:
+    """Return whether the media contains at least one real audio stream."""
+    media = Path(path)
+    if not media.is_file():
+        raise FileNotFoundError(f"media file not found: {media}")
+
+    probe = ffprobe_path or resolve_ffprobe_path()
+    if not probe:
+        raise RuntimeError("ffprobe not found; cannot verify provider-native audio")
+
+    result = subprocess.run(
+        [
+            probe,
+            "-v", "error",
+            "-select_streams", "a",
+            "-show_entries", "stream=index",
+            "-of", "json",
+            str(media),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed for {media}: {result.stderr.strip()}")
+    return bool(json.loads(result.stdout or "{}").get("streams"))

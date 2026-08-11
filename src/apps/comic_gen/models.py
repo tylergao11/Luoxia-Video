@@ -177,6 +177,10 @@ class VideoTask(BaseModel):
     prompt: str
     status: str = "pending"  # pending, processing, completed, failed
     error: Optional[str] = Field(None, description="Failure reason, if any (set by pipeline / cancel / orphan recovery)")
+    acceptance: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Objective clip acceptance verdict and measured evidence",
+    )
     video_url: Optional[str] = None
     duration: int = Field(5, description="Video duration in seconds (model-specific range)")
     seed: Optional[int] = Field(None, description="Random seed for reproducibility")
@@ -657,8 +661,8 @@ class GlobalAssetLibrary(BaseModel):
     resolver (Episode > Series > Global) — assets here never override a
     project's or series' own assets, they only add ids that aren't
     already present locally. Reuses the existing Character/Scene/Prop
-    schema verbatim. Persisted to output/library_assets.json alongside
-    projects.json / series.json."""
+    schema verbatim. Persisted with projects/series state under
+    output/studio/state/."""
 
     characters: List[Character] = Field(default_factory=list, description="Shared global character assets")
     scenes: List[Scene] = Field(default_factory=list, description="Shared global scene assets")

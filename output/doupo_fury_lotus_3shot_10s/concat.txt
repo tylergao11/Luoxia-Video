@@ -1,3 +1,0 @@
-file 'shots/01_charge_launch.mp4'
-file 'shots/02_flight_defense.mp4'
-file 'shots/03_impact_aftermath.mp4'

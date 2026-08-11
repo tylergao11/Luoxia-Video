@@ -13,6 +13,7 @@ from ...audio.xai_tts import VOICES as XAI_VOICES
 from ...audio.xai_tts import XaiTTS, voice_records as xai_voice_records
 from ...audio.performance import SPEECH_RENDER_CONTRACT
 from ...luoxia.speech import configured_tts_provider
+from ...output_contract import OUTPUT
 
 logger = get_logger(__name__)
 
@@ -25,18 +26,22 @@ def _compute_dialogue_hash(text: str, voice_id: Optional[str], instructions: Opt
 
 
 # PR-3k · BGM preset catalog. Each entry maps a stable id → human label,
-# mood tag, and a relative path under output/presets/bgm/. v1 ships the
+# mood tag, and a contract-relative path under studio/presets/bgm/. v1 ships the
 # catalog only; actual audio files are dropped in by the operator (or
 # left empty, in which case merge_videos will skip the BGM track).
+def _bgm_url(filename: str) -> str:
+    return OUTPUT.relative_posix(OUTPUT.presets / "bgm" / filename)
+
+
 BGM_PRESETS: List[Dict[str, Any]] = [
-    {"id": "calm_warm",      "label": "温暖治愈",   "mood": "warm",      "url": "presets/bgm/calm_warm.mp3"},
-    {"id": "uplifting_pop",  "label": "明朗轻快",   "mood": "uplifting", "url": "presets/bgm/uplifting_pop.mp3"},
-    {"id": "epic_cinematic", "label": "史诗电影感", "mood": "epic",      "url": "presets/bgm/epic_cinematic.mp3"},
-    {"id": "mystery_ambient","label": "悬疑氛围",   "mood": "mystery",   "url": "presets/bgm/mystery_ambient.mp3"},
-    {"id": "sad_piano",      "label": "忧伤钢琴",   "mood": "sad",       "url": "presets/bgm/sad_piano.mp3"},
-    {"id": "tension_drama",  "label": "紧张戏剧",   "mood": "tense",     "url": "presets/bgm/tension_drama.mp3"},
-    {"id": "lofi_chill",     "label": "Lo-Fi 慵懒", "mood": "chill",     "url": "presets/bgm/lofi_chill.mp3"},
-    {"id": "fantasy_dreamy", "label": "奇幻梦境",   "mood": "dreamy",    "url": "presets/bgm/fantasy_dreamy.mp3"},
+    {"id": "calm_warm",      "label": "温暖治愈",   "mood": "warm",      "url": _bgm_url("calm_warm.mp3")},
+    {"id": "uplifting_pop",  "label": "明朗轻快",   "mood": "uplifting", "url": _bgm_url("uplifting_pop.mp3")},
+    {"id": "epic_cinematic", "label": "史诗电影感", "mood": "epic",      "url": _bgm_url("epic_cinematic.mp3")},
+    {"id": "mystery_ambient","label": "悬疑氛围",   "mood": "mystery",   "url": _bgm_url("mystery_ambient.mp3")},
+    {"id": "sad_piano",      "label": "忧伤钢琴",   "mood": "sad",       "url": _bgm_url("sad_piano.mp3")},
+    {"id": "tension_drama",  "label": "紧张戏剧",   "mood": "tense",     "url": _bgm_url("tension_drama.mp3")},
+    {"id": "lofi_chill",     "label": "Lo-Fi 慵懒", "mood": "chill",     "url": _bgm_url("lofi_chill.mp3")},
+    {"id": "fantasy_dreamy", "label": "奇幻梦境",   "mood": "dreamy",    "url": _bgm_url("fantasy_dreamy.mp3")},
 ]
 
 
@@ -84,7 +89,7 @@ def dialogue_audio_is_stale(frame: StoryboardFrame, character: Optional[Characte
 class AudioGenerator:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
-        self.output_dir = self.config.get('output_dir', 'output/audio')
+        self.output_dir = self.config.get('output_dir', str(OUTPUT.audio))
         
         # Initialize TTS Processor
         try:
@@ -344,7 +349,7 @@ class AudioGenerator:
                     family_override=family_override,
                 )
 
-            rel_path = os.path.relpath(output_path, "output")
+            rel_path = os.path.relpath(output_path, OUTPUT.root)
             frame.audio_url = rel_path
             frame.audio_error = None
             frame.status = GenerationStatus.COMPLETED
@@ -384,7 +389,7 @@ class AudioGenerator:
                 f.write(b'dummy sfx content')
                 
             # Store relative path for frontend serving
-            rel_path = os.path.relpath(output_path, "output")
+            rel_path = os.path.relpath(output_path, OUTPUT.root)
             frame.sfx_url = rel_path
             frame.status = GenerationStatus.COMPLETED
             
@@ -409,7 +414,7 @@ class AudioGenerator:
         with open(output_path, 'wb') as f:
             f.write(b'dummy v2a sfx content')
             
-        frame.sfx_url = os.path.relpath(output_path, "output")
+        frame.sfx_url = os.path.relpath(output_path, OUTPUT.root)
         return frame
 
     def generate_bgm(self, frame: StoryboardFrame) -> StoryboardFrame:
@@ -424,5 +429,5 @@ class AudioGenerator:
         with open(output_path, 'wb') as f:
             f.write(b'dummy bgm content')
             
-        frame.bgm_url = os.path.relpath(output_path, "output")
+        frame.bgm_url = os.path.relpath(output_path, OUTPUT.root)
         return frame

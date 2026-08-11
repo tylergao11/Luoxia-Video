@@ -9,12 +9,19 @@ from src.luoxia.beats.selector import select_beats
 from src.luoxia.beats.to_timeline import build_timeline_draft
 from src.luoxia.beats.validator import BeatsValidationError, validate_beats
 from src.luoxia.env import load_env_once
-from src.luoxia.paths import REPO_ROOT, timeline_frozen_path, timeline_path
+from src.luoxia.paths import (
+    REPO_ROOT,
+    episode_dir,
+    project_dir,
+    timeline_frozen_path,
+    timeline_path,
+)
 from src.luoxia.timeline.cost import estimate_timeline_cost
 from src.luoxia.timeline.freeze import BudgetExceededError, freeze_timeline, unfreeze_timeline
 from src.luoxia.timeline.io import load_timeline, save_timeline
 from src.luoxia.timeline.solver import solve_timeline
 from src.luoxia.timeline.validator import TimelineValidationError, validate_timeline
+from src.output_contract import DEFAULT_OUTPUT_ROOT
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -22,7 +29,11 @@ def main(argv: list[str] | None = None) -> int:
     # luoxia package loads it.
     load_env_once()
     parser = argparse.ArgumentParser(prog="luoxia", description="Luoxia audio-first short-drama harness")
-    parser.add_argument("--output-root", default="output", help="Episode output root (default: output)")
+    parser.add_argument(
+        "--output-root",
+        default=str(DEFAULT_OUTPUT_ROOT),
+        help=f"Managed output root (default: {DEFAULT_OUTPUT_ROOT})",
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_bval = sub.add_parser("beats-validate", help="Validate a beats.json")
@@ -173,12 +184,13 @@ def main(argv: list[str] | None = None) -> int:
             from src.luoxia.stills.characters import ensure_character_sheets
 
             doc = load_beats(args.beats)
+            work_root = project_dir(root, doc["work_id"])
             sheets = ensure_character_sheets(
-                doc.get("cast") or [], output_root=root / doc["work_id"], aspect_ratio=args.aspect
+                doc.get("cast") or [], output_root=work_root, aspect_ratio=args.aspect
             )
             save_beats(args.beats, doc)
             missing = [c["character_id"] for c in doc["cast"] if c["character_id"] not in sheets]
-            print(f"sheets {len(sheets)}/{len(doc['cast'])} -> {root / doc['work_id'] / 'characters'}")
+            print(f"sheets {len(sheets)}/{len(doc['cast'])} -> {work_root / 'characters'}")
             if missing:
                 print(f"  no appearance, faces will drift: {', '.join(missing)}")
             return 0
@@ -188,8 +200,8 @@ def main(argv: list[str] | None = None) -> int:
 
             path = timeline_path(root, args.episode_id)
             tl = load_timeline(path)
-            polish_timeline_prompts(tl)
-            render_timeline_stills(tl, output_root=root / args.episode_id)
+            polish_timeline_prompts(tl, strict=True)
+            render_timeline_stills(tl, output_root=episode_dir(root, args.episode_id))
             save_timeline(path, tl)
             ready = sum(1 for s in tl["shots"] if (s.get("still") or {}).get("status") == "ready")
             print(f"stills ready {ready}/{len(tl['shots'])}")
@@ -231,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
             tl = load_timeline(path)
             synthesize = None
             if not args.dry_run:
-                synthesize = _make_tts_synthesize(root / args.episode_id, tl)
+                synthesize = _make_tts_synthesize(episode_dir(root, args.episode_id), tl)
             rewrite = None if args.no_rewrite else make_rewrite_fn()
             solve_timeline(tl, synthesize=synthesize, rewrite=rewrite)
             save_timeline(path, tl)
@@ -261,7 +273,11 @@ def main(argv: list[str] | None = None) -> int:
 
             path = timeline_path(root, args.episode_id)
             tl = load_timeline(path)
-            render_timeline_videos(tl, output_root=root / args.episode_id, timeline_path=path)
+            render_timeline_videos(
+                tl,
+                output_root=episode_dir(root, args.episode_id),
+                timeline_path=path,
+            )
             save_timeline(path, tl)
             print("render complete")
             return 0
@@ -270,9 +286,16 @@ def main(argv: list[str] | None = None) -> int:
 
             path = timeline_path(root, args.episode_id)
             tl = load_timeline(path)
-            out = Path(args.out) if args.out else root / args.episode_id / "final.mp4"
-            assemble_episode(tl, output_path=out, work_dir=root / args.episode_id / "_compose")
-            save_timeline(path, tl)
+            ep_root = episode_dir(root, args.episode_id)
+            out = Path(args.out) if args.out else ep_root / "final.mp4"
+            try:
+                assemble_episode(
+                    tl,
+                    output_path=out,
+                    work_dir=ep_root / "_compose",
+                )
+            finally:
+                save_timeline(path, tl)
             print(f"composed -> {out}")
             return 0
         if args.cmd == "lipsync":
@@ -281,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
             path = timeline_path(root, args.episode_id)
             tl = load_timeline(path)
             try:
-                apply_lipsync(tl, output_root=root / args.episode_id)
+                apply_lipsync(tl, output_root=episode_dir(root, args.episode_id))
             finally:
                 save_timeline(path, tl)
             print("required lipsync pass complete")

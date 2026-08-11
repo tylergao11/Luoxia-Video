@@ -1,7 +1,8 @@
 """Local Qwen3-TTS VoiceDesign adapter for dramatic dialogue.
 
 The application process intentionally does not import PyTorch.  Inference runs in an
-isolated environment under ``output/runtime/qwen3-tts`` (or paths supplied through
+isolated environment under the output contract's ``runtime/qwen3-tts`` namespace
+(or paths supplied through
 environment variables), so the desktop/backend dependency set stays small.
 """
 from __future__ import annotations
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.audio.performance import normalize_performance, text_sha256
+from src.output_contract import OUTPUT
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +140,7 @@ class Qwen3TTS:
         self.runtime_root = Path(
             runtime_root
             or os.getenv("QWEN3_TTS_RUNTIME_DIR")
-            or repo_root / "output" / "runtime" / "qwen3-tts"
+            or OUTPUT.runtime / "qwen3-tts"
         )
         default_python = (
             self.runtime_root / ".venv" / "Scripts" / "python.exe"

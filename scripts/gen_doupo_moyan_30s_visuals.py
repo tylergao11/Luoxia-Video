@@ -13,9 +13,10 @@ from src.luoxia.env import load_env_once
 load_env_once()
 
 from src.models.xai_image import XaiImageModel  # noqa: E402
+from src.output_contract import OUTPUT  # noqa: E402
 
 
-ROOT = Path("output/doupo_moyan_30s")
+ROOT = OUTPUT.sample_dir("doupo_moyan_30s")
 CHAR_DIR = ROOT / "characters"
 STILL_DIR = ROOT / "stills"
 

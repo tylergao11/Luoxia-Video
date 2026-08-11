@@ -19,6 +19,10 @@ from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 from ...utils.provider_registry import resolve_provider_backend
 from ...utils.system_check import get_ffmpeg_path, get_ffmpeg_install_instructions
+from src.luoxia.render.acceptance import VideoAcceptanceError, evaluate_video_file
+from src.luoxia.paths import timeline_frozen_path, timeline_path
+from src.luoxia.timeline.video_policy import default_video_acceptance_policy
+from src.output_contract import OUTPUT
 
 logger = get_logger(__name__)
 
@@ -79,9 +83,9 @@ class ComicGenPipeline:
         self.audio_generator = AudioGenerator(self.config.get('audio'))
         self.export_manager = ExportManager(self.config.get('export'))
         
-        self.data_file = "output/projects.json"
-        self.series_data_file = "output/series.json"
-        self.library_data_file = "output/library_assets.json"
+        self.data_file = str(OUTPUT.state / "projects.json")
+        self.series_data_file = str(OUTPUT.state / "series.json")
+        self.library_data_file = str(OUTPUT.state / "library_assets.json")
         self._save_lock = threading.RLock()  # Reentrant lock to prevent concurrent file writes
         self.scripts: Dict[str, Script] = self._load_data()
         self.series_store: Dict[str, Series] = self._load_series_data()
@@ -291,7 +295,7 @@ class ComicGenPipeline:
 
         Mirrors `update_frame_workbench`'s clamping rules (≤ _T2I_HISTORY_LIMIT
         FIFO; t2i_selected_index → index of the newly appended URL). Caller is
-        expected to have already saved the file under output/uploads/ and pass
+        expected to have already saved the file under Studio uploads and pass
         the relative URL path the frontend can resolve via /files.
 
         Returns the updated frame, or None if script/frame can't be found.
@@ -387,13 +391,12 @@ class ComicGenPipeline:
         """Luoxia single source of truth: timeline.json request_duration_s."""
         if not frame_id:
             return None
-        from pathlib import Path
         from src.luoxia.timeline.io import load_timeline
         from src.luoxia.render.duration import require_request_duration
 
         for candidate in (
-            Path("output") / script_id / "timeline.json",
-            Path("output") / script_id / "timeline.frozen.json",
+            timeline_path(OUTPUT.root, script_id),
+            timeline_frozen_path(OUTPUT.root, script_id),
         ):
             if not candidate.is_file():
                 continue
@@ -2025,7 +2028,7 @@ class ComicGenPipeline:
                 if is_object_key(url) or url.startswith("http"):
                     ref_image_paths.append(url)
                 else:
-                    potential_path = _safe_resolve_path("output", url)
+                    potential_path = _safe_resolve_path(str(OUTPUT.root), url)
                     if os.path.exists(potential_path):
                         ref_image_paths.append(potential_path)
             
@@ -2035,7 +2038,7 @@ class ComicGenPipeline:
                     if ref_image_url not in ref_image_paths:
                         ref_image_paths.append(ref_image_url)
                 else:
-                    potential_path = _safe_resolve_path("output", ref_image_url)
+                    potential_path = _safe_resolve_path(str(OUTPUT.root), ref_image_url)
                     if os.path.exists(potential_path):
                         if potential_path not in ref_image_paths:
                             ref_image_paths.append(potential_path)
@@ -2192,10 +2195,10 @@ class ComicGenPipeline:
             # Resolve source path
             if image_url and not image_url.startswith("http"):
                 # Assume relative to output dir
-                src_path = _safe_resolve_path("output", image_url)
+                src_path = _safe_resolve_path(str(OUTPUT.root), image_url)
                 if os.path.exists(src_path) and os.path.isfile(src_path):
                     # Create snapshot dir
-                    snapshot_dir = os.path.join("output", "video_inputs")
+                    snapshot_dir = os.path.join(OUTPUT.work, "video_inputs")
                     os.makedirs(snapshot_dir, exist_ok=True)
 
                     # Define snapshot path
@@ -2209,7 +2212,7 @@ class ComicGenPipeline:
                     shutil.copy2(src_path, snapshot_path)
                     
                     # Update URL to relative path
-                    snapshot_url = f"video_inputs/{snapshot_filename}"
+                    snapshot_url = OUTPUT.relative_posix(snapshot_path)
         except Exception as e:
             logger.error(f"Failed to snapshot input image: {e}")
             # Fallback to original URL
@@ -2279,7 +2282,7 @@ class ComicGenPipeline:
         # Resolve video path
         video_path = video_task.video_url
         if not video_path.startswith("/") and not video_path.startswith("http"):
-            video_path = _safe_resolve_path("output", video_path)
+            video_path = _safe_resolve_path(str(OUTPUT.root), video_path)
 
         if video_path.startswith("http"):
             # Download to temp file first
@@ -2293,7 +2296,7 @@ class ComicGenPipeline:
         if not ffmpeg_path:
             raise RuntimeError("FFmpeg is required for frame extraction but was not found.")
 
-        output_dir = os.path.join("output", "storyboard")
+        output_dir = str(OUTPUT.storyboard)
         os.makedirs(output_dir, exist_ok=True)
         _validate_safe_id(frame_id, "frame_id")
         output_filename = f"frame_{frame_id}_lastframe_{uuid.uuid4().hex[:8]}.jpg"
@@ -2321,7 +2324,7 @@ class ComicGenPipeline:
         from ...utils.oss_utils import OSSImageUploader
         uploader = OSSImageUploader()
         oss_url = uploader.upload_image(output_path)
-        image_url = oss_url if oss_url else os.path.relpath(output_path, "output")
+        image_url = oss_url if oss_url else OUTPUT.relative_posix(output_path)
 
         # Create new variant
         variant = ImageVariant(
@@ -2350,7 +2353,8 @@ class ComicGenPipeline:
         from .models import ImageVariant, ImageAsset
 
         # Validate that image_path is inside the output directory
-        safe_path = _safe_resolve_path("output", os.path.relpath(image_path, "output") if os.path.isabs(image_path) else image_path)
+        relative_image = OUTPUT.relative_posix(image_path) if os.path.isabs(image_path) else image_path
+        safe_path = _safe_resolve_path(str(OUTPUT.root), relative_image)
 
         script = self.get_script(script_id)
         if not script:
@@ -2364,7 +2368,7 @@ class ComicGenPipeline:
         from ...utils.oss_utils import OSSImageUploader
         uploader = OSSImageUploader()
         oss_url = uploader.upload_image(safe_path)
-        image_url = oss_url if oss_url else os.path.relpath(safe_path, "output")
+        image_url = oss_url if oss_url else OUTPUT.relative_posix(safe_path)
 
         # Create new variant
         variant = ImageVariant(
@@ -2394,7 +2398,7 @@ class ComicGenPipeline:
         
         # If it's a local file path (relative to output)
         if not url.startswith("http"):
-            local_path = _safe_resolve_path("output", url)
+            local_path = _safe_resolve_path(str(OUTPUT.root), url)
             if os.path.exists(local_path):
                 return local_path
                 
@@ -2412,6 +2416,44 @@ class ComicGenPipeline:
         except Exception as e:
             logger.error(f"Failed to download image: {e}")
             raise
+
+    def _require_accepted_video_task(
+        self,
+        task: VideoTask,
+        *,
+        recheck: bool = False,
+    ) -> str:
+        """Return the local path only after the candidate passes objective review."""
+        if task.status != GenerationStatus.COMPLETED or not task.video_url:
+            raise ValueError(f"Video task {task.id} is not completed")
+        local_path = _safe_resolve_path(str(OUTPUT.root), task.video_url)
+        if not os.path.isfile(local_path):
+            error = FileNotFoundError(f"Video task {task.id} file missing: {local_path}")
+            task.status = "failed"
+            task.error = str(error)
+            task.acceptance = {
+                "status": "failed",
+                "checker": default_video_acceptance_policy()["checker"],
+                "reasons": [f"missing_file: {local_path}"],
+            }
+            raise error
+        if not recheck and (task.acceptance or {}).get("status") == "passed":
+            return local_path
+
+        acceptance = evaluate_video_file(
+            local_path,
+            required_duration_s=float(task.duration),
+            policy=default_video_acceptance_policy(),
+        )
+        task.acceptance = acceptance
+        if acceptance["status"] != "passed":
+            error = VideoAcceptanceError(task.id, acceptance)
+            task.status = "failed"
+            task.error = str(error)
+            raise error
+        task.error = None
+        return local_path
+
     def select_video_for_frame(self, script_id: str, frame_id: str, video_id: str) -> Script:
         """Manual select: user pins this video as the active take.
 
@@ -2430,6 +2472,13 @@ class ComicGenPipeline:
         video = next((v for v in script.video_tasks if v.id == video_id), None)
         if not video:
             raise ValueError("Video task not found")
+        if video.frame_id != frame_id:
+            raise ValueError("Video task does not belong to this frame")
+        try:
+            self._require_accepted_video_task(video, recheck=True)
+        except Exception:
+            self._save_data()
+            raise
 
         frame.selected_video_id = video_id
         frame.video_url = video.video_url
@@ -2439,7 +2488,7 @@ class ComicGenPipeline:
         return script
 
     def auto_select_latest_video(self, script_id: str, frame_id: str) -> Script:
-        """Auto select: pick the latest completed video task for this frame.
+        """Auto select the latest objectively accepted video task for this frame.
 
         Idempotent. Skips the update entirely if the frame is pinned by the
         user (is_video_pinned=True). Called by the frontend on every task
@@ -2457,19 +2506,29 @@ class ComicGenPipeline:
         if frame.is_video_pinned:
             return script  # user has manually pinned — don't overwrite
 
-        # Latest completed task wins. VideoTask carries created_at
+        # Latest accepted task wins. This is a UX default, not an aesthetic ranking.
+        # A future VideoScore/VBench reviewer can replace this ordering without changing
+        # the acceptance contract below. VideoTask carries created_at
         # (default_factory=time.time); we use it as the "completion order"
         # proxy. Backend doesn't track per-task completion time, but tasks
         # in the same batch are queued at roughly the same created_at and
         # complete in arrival order — close enough for "show me what just
         # came out" UX.
-        frame_tasks = [
-            t for t in script.video_tasks
-            if t.frame_id == frame_id
-            and t.status == GenerationStatus.COMPLETED
-            and t.video_url
-        ]
+        frame_tasks = []
+        for task in script.video_tasks:
+            if (
+                task.frame_id != frame_id
+                or task.status != GenerationStatus.COMPLETED
+                or not task.video_url
+            ):
+                continue
+            try:
+                self._require_accepted_video_task(task)
+            except (FileNotFoundError, ValueError, VideoAcceptanceError):
+                continue
+            frame_tasks.append(task)
         if not frame_tasks:
+            self._save_data()
             return script  # nothing to select yet
 
         latest = max(frame_tasks, key=lambda t: getattr(t, "created_at", 0) or 0)
@@ -2509,7 +2568,7 @@ class ComicGenPipeline:
         """Resolve a media URL to a local file path.
 
         Handles three cases:
-        1. Local relative path (e.g. 'video/xxx.mp4') → resolve under output/
+        1. Contract-relative local path → resolve under the managed output root
         2. OSS object key (e.g. 'lumenx/videos/xxx.mp4') → sign URL then download
         3. Full HTTP URL → download directly
         """
@@ -2518,7 +2577,7 @@ class ComicGenPipeline:
 
         # Case 1: Try as local path first
         if not url.startswith("http"):
-            local_path = _safe_resolve_path("output", url)
+            local_path = _safe_resolve_path(str(OUTPUT.root), url)
             if os.path.exists(local_path):
                 return local_path
             # Not found locally — might be an OSS object key
@@ -2536,7 +2595,7 @@ class ComicGenPipeline:
         # Case 2 & 3: Download from HTTP URL
         import hashlib
         url_hash = hashlib.md5(url.split("?")[0].encode()).hexdigest()[:12]
-        cache_dir = os.path.join("output", "cache")
+        cache_dir = str(OUTPUT.cache / "downloads")
         os.makedirs(cache_dir, exist_ok=True)
         cached = os.path.join(cache_dir, f"{url_hash}{suffix}")
         if os.path.exists(cached) and os.path.getsize(cached) > 0:
@@ -2635,11 +2694,11 @@ class ComicGenPipeline:
         """Ensure background audio is separated and cached for this frame's video.
 
         Returns absolute path to bg audio WAV, or None if video has no audio.
-        Caches result to output/audio/bg_{frame_id}.wav — only re-runs Demucs
+        Caches result to Studio audio/bg_{frame_id}.wav — only re-runs Demucs
         if video source changed.
         """
         if frame.bg_audio_url and frame.bg_audio_source_video == video_url:
-            cached_path = _safe_resolve_path("output", frame.bg_audio_url)
+            cached_path = _safe_resolve_path(str(OUTPUT.root), frame.bg_audio_url)
             if os.path.exists(cached_path):
                 logger.info(f"[DUB] Background audio cache hit: {frame.bg_audio_url}")
                 return cached_path
@@ -2655,11 +2714,11 @@ class ComicGenPipeline:
                 return None
 
             cache_filename = f"bg_{frame.id}.wav"
-            cache_path = _safe_resolve_path(os.path.join("output", "audio"), cache_filename)
+            cache_path = _safe_resolve_path(str(OUTPUT.audio), cache_filename)
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
             shutil.copy2(bg_path, cache_path)
 
-            frame.bg_audio_url = f"audio/{cache_filename}"
+            frame.bg_audio_url = OUTPUT.relative_posix(cache_path)
             frame.bg_audio_source_video = video_url
             logger.info(f"[DUB] Background audio cached: {cache_filename}")
             return cache_path
@@ -2704,7 +2763,7 @@ class ComicGenPipeline:
 
         # Delete old preview (lazy cleanup)
         if frame.preview_video_url:
-            old_preview = _safe_resolve_path("output", frame.preview_video_url)
+            old_preview = _safe_resolve_path(str(OUTPUT.root), frame.preview_video_url)
             if os.path.exists(old_preview):
                 try:
                     os.remove(old_preview)
@@ -2712,7 +2771,7 @@ class ComicGenPipeline:
                     pass
 
         output_filename = f"preview_{frame_id}_{int(time.time())}.mp4"
-        output_path = _safe_resolve_path(os.path.join("output", "video"), output_filename)
+        output_path = _safe_resolve_path(str(OUTPUT.video), output_filename)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         # Ensure background audio is cached (Demucs runs only on first call or video change)
@@ -2783,7 +2842,7 @@ class ComicGenPipeline:
         if not os.path.exists(output_path):
             raise RuntimeError("Preview video was not created")
 
-        frame.preview_video_url = f"video/{output_filename}"
+        frame.preview_video_url = OUTPUT.relative_posix(output_path)
         frame.dubbed_video_task_id = video_task_id
         frame.dub_offset_ms = offset_ms
         self._save_data()
@@ -2807,7 +2866,7 @@ class ComicGenPipeline:
 
         # Delete old dubbed file
         if frame.dubbed_video_url:
-            old_path = _safe_resolve_path("output", frame.dubbed_video_url)
+            old_path = _safe_resolve_path(str(OUTPUT.root), frame.dubbed_video_url)
             if os.path.exists(old_path):
                 try:
                     os.remove(old_path)
@@ -2835,7 +2894,7 @@ class ComicGenPipeline:
         for url_field in ("dubbed_video_url", "preview_video_url"):
             url = getattr(frame, url_field)
             if url:
-                path = _safe_resolve_path("output", url)
+                path = _safe_resolve_path(str(OUTPUT.root), url)
                 if os.path.exists(path):
                     try:
                         os.remove(path)
@@ -2890,65 +2949,84 @@ class ComicGenPipeline:
         video_paths = []
         for i, frame in enumerate(script.frames):
             logger.info(f"[MERGE] Processing frame {i+1}/{len(script.frames)}: {frame.id}")
-
-            # Prefer dubbed version (TTS audio already overlaid with lip-sync offset)
-            if frame.dubbed_video_url:
-                dubbed_path = _safe_resolve_path("output", frame.dubbed_video_url)
-                if os.path.exists(dubbed_path):
-                    logger.debug(f"[MERGE]   -> Using dubbed video: {frame.dubbed_video_url}")
-                    video_paths.append(frame.dubbed_video_url)
-                    continue
-                else:
-                    logger.warning(f"[MERGE]   -> Dubbed video file missing: {dubbed_path}, falling back")
-
             if not frame.selected_video_id:
-                # Try to find a default completed video
-                default_video = next((v for v in script.video_tasks if v.frame_id == frame.id and v.status == "completed"), None)
-                if default_video and default_video.video_url:
-                    logger.debug(f"[MERGE]   -> Using default video: {default_video.video_url}")
-                    video_paths.append(default_video.video_url)
-                else:
-                    logger.warning(f"[MERGE]   -> No video selected or available, skipping")
-                continue
-                
+                raise ValueError(
+                    f"Frame {frame.id} has no selected video; refusing automatic fallback"
+                )
+
             video = next((v for v in script.video_tasks if v.id == frame.selected_video_id), None)
-            if video and video.video_url:
-                logger.debug(f"[MERGE]   -> Selected video: {video.video_url}")
-                video_paths.append(video.video_url)
+            if not video or video.frame_id != frame.id:
+                raise ValueError(
+                    f"Frame {frame.id} selected video {frame.selected_video_id} is missing or belongs to another frame"
+                )
+            try:
+                self._require_accepted_video_task(video, recheck=True)
+            except Exception:
+                self._save_data()
+                raise
+
+            # A dubbed take is valid only when it was derived from this exact selected take.
+            if frame.dubbed_video_url:
+                if frame.dubbed_video_task_id != video.id:
+                    raise ValueError(
+                        f"Frame {frame.id} dubbed take belongs to {frame.dubbed_video_task_id}, "
+                        f"not selected take {video.id}"
+                    )
+                dubbed_path = _safe_resolve_path(str(OUTPUT.root), frame.dubbed_video_url)
+                if not os.path.isfile(dubbed_path):
+                    raise FileNotFoundError(
+                        f"Frame {frame.id} dubbed video missing: {dubbed_path}"
+                    )
+                dubbed_acceptance = evaluate_video_file(
+                    dubbed_path,
+                    required_duration_s=float(video.duration),
+                    policy=default_video_acceptance_policy(),
+                )
+                if dubbed_acceptance["status"] != "passed":
+                    raise VideoAcceptanceError(
+                        f"{video.id}:dubbed",
+                        dubbed_acceptance,
+                    )
+                logger.debug(f"[MERGE]   -> Using dubbed video: {frame.dubbed_video_url}")
+                video_paths.append(frame.dubbed_video_url)
             else:
-                logger.warning(f"[MERGE]   -> Selected video {frame.selected_video_id} not found or has no URL")
-                
-        if not video_paths:
-            logger.error("[MERGE] No videos found to merge!")
-            raise ValueError("No videos selected to merge. Please select videos for each frame first.")
+                logger.debug(f"[MERGE]   -> Selected accepted video: {video.video_url}")
+                video_paths.append(video.video_url)
+
+        if len(video_paths) != len(script.frames):
+            raise RuntimeError(
+                f"Merge contract incomplete: accepted videos={len(video_paths)}, frames={len(script.frames)}"
+            )
         
         logger.info(f"[MERGE] Found {len(video_paths)} videos to merge")
             
         # Create file list for ffmpeg
-        list_path = _safe_resolve_path("output", f"merge_list_{script_id}.txt")
+        merge_work_dir = OUTPUT.work / "merge"
+        merge_work_dir.mkdir(parents=True, exist_ok=True)
+        list_path = _safe_resolve_path(str(merge_work_dir), f"merge_list_{script_id}.txt")
         abs_video_paths = []
 
-        with open(list_path, "w") as f:
+        with open(list_path, "w", encoding="utf-8", newline="\n") as f:
             for path in video_paths:
-                # Resolve to absolute path
-                if not path.startswith("http"):
-                    abs_path = _safe_resolve_path("output", path)
-                    if os.path.exists(abs_path):
-                        f.write(f"file '{abs_path}'\n")
-                        abs_video_paths.append(abs_path)
-                        logger.debug(f"[MERGE] Added to list: {abs_path}")
-                    else:
-                        logger.warning(f"[MERGE] Video file not found: {abs_path}")
-                        
-        if not abs_video_paths:
-            logger.error("[MERGE] No valid video files found on disk!")
-            raise ValueError("No valid video files found. The video files may have been deleted or moved.")
+                if path.startswith("http"):
+                    raise ValueError(f"Remote video URL cannot enter local merge: {path}")
+                abs_path = _safe_resolve_path(str(OUTPUT.root), path)
+                if not os.path.isfile(abs_path):
+                    raise FileNotFoundError(f"Merge input disappeared: {abs_path}")
+                f.write(f"file '{abs_path}'\n")
+                abs_video_paths.append(abs_path)
+                logger.debug(f"[MERGE] Added to list: {abs_path}")
+
+        if len(abs_video_paths) != len(script.frames):
+            raise RuntimeError(
+                f"Merge list incomplete: files={len(abs_video_paths)}, frames={len(script.frames)}"
+            )
         
         logger.info(f"[MERGE] Merge list created with {len(abs_video_paths)} videos")
 
         # Output path
         output_filename = f"merged_{script_id}_{int(time.time())}.mp4"
-        output_path = _safe_resolve_path(os.path.join("output", "video"), output_filename)
+        output_path = _safe_resolve_path(str(OUTPUT.video), output_filename)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         logger.debug(f"[MERGE] Output path: {output_path}")
@@ -2986,15 +3064,11 @@ class ComicGenPipeline:
             logger.debug(f"[MERGE] FFmpeg stdout: {result.stdout.decode()[:500] if result.stdout else 'empty'}")
             logger.info(f"[MERGE] FFmpeg completed successfully")
             
-            # Update script with merged video path
-            # Use 'videos/' (plural) to match the /files/videos route
-            script.merged_video_url = f"videos/{output_filename}"
-
             # Verify file was created and log details
             if os.path.exists(output_path):
                 file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
                 logger.info(f"[MERGE] ✅ Merged video created successfully: {output_filename} ({file_size_mb:.2f} MB)")
-                logger.info(f"[MERGE] ✅ Video accessible at: /files/videos/{output_filename}")
+                logger.info(f"[MERGE] ✅ Video accessible at: {OUTPUT.public_url(output_path)}")
             else:
                 logger.error(f"[MERGE] ❌ Merged video file NOT found at: {output_path}")
                 raise RuntimeError(f"Video merge completed but output file not found: {output_path}")
@@ -3013,9 +3087,10 @@ class ComicGenPipeline:
                     os.replace(mixed_path, output_path)
                     logger.info(f"[MERGE] ✅ BGM mux applied — final file: {output_filename}")
             except Exception as bgm_err:
-                # BGM is optional; log + carry on with the silent video
-                logger.warning(f"[MERGE] BGM mux skipped due to error: {bgm_err}")
+                raise RuntimeError(f"BGM was requested but mux failed: {bgm_err}") from bgm_err
 
+            # Publish the final URL only after every requested mux stage passed.
+            script.merged_video_url = OUTPUT.relative_posix(output_path)
             self._save_data()
 
             # Cleanup list file
@@ -3048,8 +3123,8 @@ class ComicGenPipeline:
         ffmpeg_path: str,
     ) -> Optional[str]:
         """PR-3l · Overlay BGM at the configured mix level on top of the
-        already-merged video. Returns the path of the new file, or None
-        when no BGM is configured / the file is missing.
+        already-merged video. Returns the path of the new file, or None only
+        when no BGM is configured. A configured but unusable BGM is an error.
 
         Strategy: 2-input filter — amix the existing video audio (volume =
         dialogue_level/100) with the looped BGM (volume = bgm_level/100).
@@ -3058,10 +3133,9 @@ class ComicGenPipeline:
         bgm_rel = (script.bgm_url or "").strip()
         if not bgm_rel:
             return None
-        bgm_abs = _safe_resolve_path("output", bgm_rel)
+        bgm_abs = _safe_resolve_path(str(OUTPUT.root), bgm_rel)
         if not os.path.exists(bgm_abs):
-            logger.info(f"[MERGE/BGM] preset file missing — {bgm_abs}; skipping mux")
-            return None
+            raise FileNotFoundError(f"configured BGM file missing: {bgm_abs}")
 
         mix = script.mix_settings or {"dialogue": 100, "bgm": 35, "sfx": 60}
         dial = max(0, min(100, int(mix.get("dialogue", 100)))) / 100.0
@@ -3092,11 +3166,9 @@ class ComicGenPipeline:
             subprocess.run(cmd, check=True, capture_output=True, timeout=300)
         except subprocess.CalledProcessError as e:
             stderr_msg = e.stderr.decode() if e.stderr else ""
-            logger.warning(f"[MERGE/BGM] ffmpeg failed: {stderr_msg[:400]}")
-            return None
+            raise RuntimeError(f"BGM ffmpeg failed: {stderr_msg[:400]}") from e
         if not os.path.exists(mixed_path):
-            logger.warning(f"[MERGE/BGM] mixed output not found: {mixed_path}")
-            return None
+            raise RuntimeError(f"BGM mixed output not found: {mixed_path}")
         return mixed_path
 
     def _extract_ffmpeg_error_message(self, stderr: str, video_paths: List[str]) -> str:
@@ -3266,6 +3338,13 @@ class ComicGenPipeline:
         try:
             # Update status to processing
             task.status = "processing"
+            task.error = None
+            policy = default_video_acceptance_policy()
+            task.acceptance = {
+                "status": "pending",
+                "checker": policy["checker"],
+                "reasons": [],
+            }
             self._save_data()
             
             # Download image to temp file
@@ -3275,7 +3354,7 @@ class ComicGenPipeline:
             
             # Generate video
             output_filename = f"video_{task_id}.mp4"
-            output_path = os.path.join("output", "video", output_filename)
+            output_path = os.path.join(OUTPUT.video, output_filename)
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
             # Handle Audio Logic
@@ -3413,8 +3492,19 @@ class ComicGenPipeline:
                     on_provider_ids=_capture_provider_ids,
                 )
             
-            task.video_url = os.path.relpath(output_path, "output")
+            generated_path = str(video_path or output_path)
+            if not os.path.isfile(generated_path):
+                raise FileNotFoundError(f"Generated video file not found: {generated_path}")
+            task.video_url = OUTPUT.relative_posix(generated_path)
+            task.acceptance = evaluate_video_file(
+                generated_path,
+                required_duration_s=float(task.duration),
+                policy=policy,
+            )
+            if task.acceptance["status"] != "passed":
+                raise VideoAcceptanceError(task.id, task.acceptance)
             task.status = "completed"
+            task.error = None
             
             # Sync with asset if this is an asset video
             if task.asset_id:
@@ -3425,6 +3515,7 @@ class ComicGenPipeline:
             logger.exception("Failed to process video task")
             logger.error(f"Video generation failed: {e}")
             task.status = "failed"
+            task.error = str(e)
             if task.asset_id:
                 self._sync_asset_video_task(script, task)
             
@@ -3498,7 +3589,7 @@ class ComicGenPipeline:
         # Try to delete the video file
         try:
             if video_task_to_delete and video_task_to_delete.video_url:
-                video_path = os.path.join("output", video_task_to_delete.video_url)
+                video_path = str(OUTPUT.resolve(video_task_to_delete.video_url))
                 if os.path.exists(video_path):
                     os.remove(video_path)
                     logger.info(f"Deleted video file: {video_path}")
@@ -4495,7 +4586,7 @@ class ComicGenPipeline:
 
         voice_id_str = str(voice_id)
 
-        cache_dir = "output/cache/voice_design_preview"
+        cache_dir = str(OUTPUT.cache / "voice_design_preview")
         os.makedirs(cache_dir, exist_ok=True)
         cache_key = hashlib.md5(f"{voice_id_str}|{preview_text}".encode("utf-8")).hexdigest()
         cache_path = os.path.join(cache_dir, f"{cache_key}.mp3")
@@ -4522,7 +4613,7 @@ class ComicGenPipeline:
                 family_override="cosyvoice",
             )
 
-        preview_url = f"cache/voice_design_preview/{cache_key}.mp3"
+        preview_url = OUTPUT.relative_posix(cache_path)
         return {"voice_id": voice_id_str, "preview_url": preview_url, "target_model": target_model}
 
     def voice_design_save(
