@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -122,6 +124,44 @@ def _best_grok_session() -> Optional[Dict[str, Any]]:
     return candidates[0][0]
 
 
+def _refresh_grok_session() -> Optional[Dict[str, Any]]:
+    """Ask the installed Grok/Doggy CLI to run its owned silent OIDC refresh.
+
+    Doggy already owns issuer discovery, refresh grants, locking and atomic writes.
+    Luoxia only points the CLI at the auth store it discovered, then re-reads that
+    store; it never reimplements OAuth or handles browser login here.
+    """
+    cli_override = os.getenv("GROK_CLI_PATH") or os.getenv("DOGGY_CLI_PATH")
+    cli = cli_override or shutil.which("grok")
+    if not cli:
+        return None
+    auth_path = _grok_auth_path()
+    if not auth_path.is_file():
+        return None
+    env = dict(os.environ)
+    env["GROK_HOME"] = str(auth_path.parent)
+    try:
+        result = subprocess.run(
+            [str(cli), "models"],
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    refreshed = _best_grok_session()
+    if refreshed and not _session_expired(refreshed):
+        refreshed["source"] = "grok_cli_refresh"
+        return refreshed
+    return None
+
+
 class XaiPoolAuthProvider:
     id = _PROVIDER_ID
     display_name = "Grok subscription pool (session)"
@@ -227,4 +267,13 @@ class XaiPoolAuthProvider:
             except Exception:
                 pass
             return imported
+        candidate = imported or local
+        if candidate and candidate.get("refresh_token"):
+            refreshed = _refresh_grok_session()
+            if refreshed:
+                try:
+                    save_session(self.id, refreshed)
+                except Exception:
+                    pass
+                return refreshed
         return local if local and local.get("access_token") else imported

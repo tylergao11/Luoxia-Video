@@ -18,6 +18,7 @@ from .models import (
     PlaygroundOutput,
 )
 from .storage import PlaygroundStorage
+from ...output_contract import OUTPUT, safe_segment
 from ...utils import get_logger
 
 logger = get_logger(__name__)
@@ -25,8 +26,8 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Output directories
 # ---------------------------------------------------------------------------
-IMAGE_OUTPUT_DIR = os.path.join("output", "playground", "images")
-VIDEO_OUTPUT_DIR = os.path.join("output", "playground", "videos")
+IMAGE_OUTPUT_DIR = str(OUTPUT.playground_images)
+VIDEO_OUTPUT_DIR = str(OUTPUT.playground_videos)
 
 
 class PlaygroundService:
@@ -97,7 +98,7 @@ class PlaygroundService:
         self.storage.update_generation(gen)
 
     def save_to_library(self, generation_id: str, output_id: str, category: str = "general") -> bool:
-        """Copy a generated output to ``output/assets/{category}/`` and flag
+        """Copy a generated output to the Studio asset library and flag
         :pyattr:`PlaygroundOutput.saved_to_library` = True."""
         gen = self.storage.get_generation(generation_id)
         if gen is None:
@@ -113,18 +114,16 @@ class PlaygroundService:
             logger.warning("save_to_library: output %s not found in generation %s", output_id, generation_id)
             return False
 
-        # media_path is stored as e.g. "output/playground/images/t2i_xxx_0.png"
-        # Normalise: try as-is first, then strip leading "output/" and re-join
-        src_path = target_output.media_path
-        if not os.path.isfile(src_path):
-            alt = os.path.join("output", target_output.media_path)
-            if os.path.isfile(alt):
-                src_path = alt
+        try:
+            src_path = str(OUTPUT.resolve(target_output.media_path))
+        except ValueError as exc:
+            logger.error("save_to_library: invalid source path: %s", exc)
+            return False
         if not os.path.isfile(src_path):
             logger.error("save_to_library: source file not found: %s", target_output.media_path)
             return False
 
-        dest_dir = os.path.join("output", "assets", category)
+        dest_dir = os.path.join(OUTPUT.assets, safe_segment(category, label="category"))
         os.makedirs(dest_dir, exist_ok=True)
 
         dest_path = os.path.join(dest_dir, os.path.basename(src_path))
@@ -153,7 +152,7 @@ class PlaygroundService:
                     "name": asset_name,
                     "description": prompt_text,
                     # Point the library record at the freshly-copied file.
-                    "image_url": dest_path,
+                    "image_url": OUTPUT.relative_posix(dest_path),
                 },
             )
             logger.info(
@@ -196,7 +195,7 @@ class PlaygroundService:
 
                 output_entry = PlaygroundOutput(
                     id=str(uuid.uuid4()),
-                    media_path=out_path,
+                    media_path=OUTPUT.relative_posix(out_path),
                     media_type="image",
                 )
                 gen.outputs.append(output_entry)
@@ -291,7 +290,7 @@ class PlaygroundService:
 
                 output_entry = PlaygroundOutput(
                     id=str(uuid.uuid4()),
-                    media_path=out_path,
+                    media_path=OUTPUT.relative_posix(out_path),
                     media_type="video",
                 )
                 gen.outputs.append(output_entry)
@@ -450,12 +449,7 @@ class PlaygroundService:
         if first.startswith(("http://", "https://")):
             return None, first
 
-        # Try as-is, then relative to output/
-        if os.path.exists(first):
-            return first, None
-        candidate = os.path.join("output", first)
-        if os.path.exists(candidate):
-            return candidate, None
-
-        # Fall back to treating it as a URL-like reference
-        return None, first
+        candidate = OUTPUT.resolve(first)
+        if candidate.is_file():
+            return str(candidate), None
+        raise FileNotFoundError(f"input media does not exist: {candidate}")

@@ -2,6 +2,7 @@ import os
 from typing import Dict, Any
 from .models import StoryboardFrame, GenerationStatus
 from ...models.wanx import WanxModel
+from ...output_contract import OUTPUT
 from ...utils import get_logger
 
 logger = get_logger(__name__)
@@ -10,7 +11,7 @@ class VideoGenerator:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
         self.model = WanxModel(self.config.get('model', {}))
-        self.output_dir = self.config.get('output_dir', 'output/video')
+        self.output_dir = self.config.get('output_dir', str(OUTPUT.video))
 
     def generate_i2v(self, image_url: str, prompt: str, duration: int = 5, audio_url: str = None) -> Dict[str, Any]:
         """
@@ -32,7 +33,7 @@ class VideoGenerator:
         # Handle local file paths
         img_path = None
         if image_url and not image_url.startswith("http"):
-            potential_path = os.path.join("output", image_url)
+            potential_path = os.path.join(OUTPUT.root, image_url)
             if os.path.exists(potential_path):
                 img_path = os.path.abspath(potential_path)
             elif os.path.exists(image_url):
@@ -51,7 +52,7 @@ class VideoGenerator:
             )
             
             # Upload to OSS if configured
-            video_url = os.path.relpath(output_path, "output")
+            video_url = os.path.relpath(output_path, OUTPUT.root)
             try:
                 from ...utils.oss_utils import OSSImageUploader
                 uploader = OSSImageUploader()
@@ -78,8 +79,13 @@ class VideoGenerator:
             
         frame.status = GenerationStatus.PROCESSING
         
-        # Use the optimized video prompt if available, otherwise fallback to image prompt or description
-        prompt = frame.video_prompt or frame.image_prompt or frame.action_description
+        prompt = (frame.video_prompt or "").strip()
+        if not prompt:
+            logger.error(
+                f"Frame {frame.id} has no dedicated motion prompt. Refusing I2V generation."
+            )
+            frame.status = GenerationStatus.FAILED
+            return frame
         
         # Convert file:// URL to local path if necessary, or ensure the model can handle it.
         # Wanx API needs a public URL or OSS URL. 
@@ -107,7 +113,7 @@ class VideoGenerator:
              # We need to prepend the output directory.
              
              # Assuming we are running from project root
-             potential_path = os.path.join("output", img_url)
+             potential_path = os.path.join(OUTPUT.root, img_url)
              if os.path.exists(potential_path):
                  img_path = os.path.abspath(potential_path)
              else:
@@ -126,7 +132,7 @@ class VideoGenerator:
             )
             
             # Store relative path for frontend serving
-            rel_path = os.path.relpath(output_path, "output")
+            rel_path = os.path.relpath(output_path, OUTPUT.root)
             frame.video_url = rel_path
             frame.status = GenerationStatus.COMPLETED
             

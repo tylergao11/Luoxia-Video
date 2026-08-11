@@ -13,13 +13,15 @@ load_env_once()
 
 from src.audio.doubao_tts import DoubaoTTS  # noqa: E402
 from src.audio.performance import normalize_performance  # noqa: E402
+from src.output_contract import OUTPUT  # noqa: E402
 
 TEXT = (
     "纳兰小姐，看在纳兰老爷子的面上，萧炎奉劝你几句话——"
     "三十年河东，三十年河西，莫欺少年穷！"
 )
 
-OUT_DIR = Path("output/doupo_moyan/audio")
+ROOT = OUTPUT.sample_dir("doupo_moyan")
+OUT_DIR = ROOT / "audio"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 PERFORMANCE = {
@@ -141,10 +143,10 @@ def main() -> None:
         f"instructions={INSTRUCTIONS}\n"
         f"takes={','.join(r[1] for r in results)}\n"
         "canonical_line_unchanged=true\n"
-        "listen_all=output/doupo_moyan/audio/line_doubao_*.wav\n"
+        f"listen_all={OUT_DIR / 'line_doubao_*.wav'}\n"
     )
     (OUT_DIR / "line_doubao_comparison.txt").write_text(meta, encoding="utf-8")
-    Path("output/doupo_moyan/dialogue.txt").write_text(TEXT + "\n", encoding="utf-8")
+    (ROOT / "dialogue.txt").write_text(TEXT + "\n", encoding="utf-8")
     print("CANONICAL line.wav unchanged; choose after listening")
     print("ALL", [(r[0], r[1], round(r[3], 2)) for r in results])
 

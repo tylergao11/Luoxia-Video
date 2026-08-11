@@ -90,21 +90,25 @@ logs/
 
 # Project outputs
 static/output/
-# Keep generated media out of Git, but retain small text run definitions so a
-# project can be reproduced from another checkout.  Provider result receipts
-# are derived data and can contain expiring download URLs.
+# Local state, media, provider receipts and model artifacts never belong in Git.
+# Keep only the layout docs and deliberately curated sample recipes.
 output/**
 !output/**/
-!output/**/*.json
-!output/**/*.yaml
-!output/**/*.yml
-!output/**/*.toml
-!output/**/*.md
-!output/**/*.txt
-!output/**/*.ass
-!output/**/*.srt
-!output/**/*.py
-output/**/*results*.json
+!output/README.md
+!output/samples/**/README.md
+!output/samples/**/recipes/
+!output/samples/**/recipes/*.py
+# Formal episode truth and reviewable media are product assets, not disposable model output.
+!output/episodes/**/timeline.json
+!output/episodes/**/timeline.frozen.json
+!output/episodes/**/stills/*.png
+!output/episodes/**/stills/*.jpg
+!output/episodes/**/stills/*.webp
+!output/episodes/**/audio/*.wav
+!output/episodes/**/audio/*.mp3
+!output/episodes/**/audio/*.m4a
+!output/episodes/**/video/*.mp4
+!output/episodes/**/final.mp4
 
 # Local model downloads/caches are never project configuration.
 output/runtime/**

@@ -13,9 +13,10 @@ from src.luoxia.env import load_env_once
 load_env_once()
 
 from src.audio.doubao_tts import DoubaoTTS  # noqa: E402
+from src.output_contract import OUTPUT  # noqa: E402
 
 
-OUT_DIR = Path("output/doupo_moyan_30s/audio")
+OUT_DIR = OUTPUT.sample_dir("doupo_moyan_30s") / "audio"
 TAKE_ID = "doupo-moyan-30s-v1"
 
 TAKES = [

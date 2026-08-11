@@ -5,9 +5,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from src.luoxia.media.ffprobe import measure_media_duration_s
+from src.output_contract import OUTPUT
 from src.utils.system_check import get_ffmpeg_path
 
-ROOT = Path("output/doupo_moyan")
+ROOT = OUTPUT.sample_dir("doupo_moyan")
 SESSION_VID = Path(
     r"C:\Users\84720\.Doggy\sessions"
     r"\C%3A%5CAi%5CLuoxia-Video"
@@ -110,35 +112,16 @@ def main() -> None:
 
     to_seg(vdir / "s01_src.mp4", s01, 2.0)
     to_seg(vdir / "s02_src.mp4", s02, 1.2)
-    # pad/trim s03 to audio length
-    audio_dur = 10.45
-    # if source is 10s, pad last frame for remaining
-    s03_raw = work / "s03_raw.mp4"
-    to_seg(vdir / "s03_src.mp4", s03_raw, 10.0)
-    pad = max(0.0, audio_dur - 10.0 + 0.15)  # tiny hold after line
-    if pad > 0.05:
-        # freeze last frame of s03_raw
-        run(
-            [
-                ff,
-                "-y",
-                "-i",
-                str(s03_raw),
-                "-vf",
-                f"tpad=stop_mode=clone:stop_duration={pad:.3f}",
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
-                "-preset",
-                "fast",
-                "-crf",
-                "18",
-                str(s03),
-            ]
+    # A short provider clip is a failed input, never a reason to freeze-pad.
+    s03_src = vdir / "s03_src.mp4"
+    s03_required_s = measure_media_duration_s(audio) + 0.15
+    s03_delivered_s = measure_media_duration_s(s03_src)
+    if s03_required_s - s03_delivered_s > 0.04:
+        raise RuntimeError(
+            "s03 provider clip is too short; refusing to freeze-pad: "
+            f"delivered {s03_delivered_s:.3f}s, required {s03_required_s:.3f}s"
         )
-    else:
-        shutil.copy2(s03_raw, s03)
+    to_seg(s03_src, s03, s03_required_s)
 
     still_seg(still04, s04, 1.2)
 

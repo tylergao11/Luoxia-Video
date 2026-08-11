@@ -12,9 +12,16 @@ from src.luoxia.env import load_env_once
 from src.luoxia.llm.client import LuoxiaLLM
 from src.luoxia.lipsync.runner import apply_lipsync
 from src.luoxia.orchestration import ProductionOrchestrator
-from src.luoxia.paths import beats_path, timeline_frozen_path, timeline_path
+from src.luoxia.paths import (
+    beats_path,
+    episode_dir,
+    project_dir,
+    timeline_frozen_path,
+    timeline_path,
+)
 from src.luoxia.timeline.freeze import freeze_timeline
 from src.luoxia.timeline.io import load_timeline, save_timeline
+from src.output_contract import DEFAULT_OUTPUT_ROOT
 
 
 @dataclass
@@ -30,7 +37,7 @@ class RunResult:
 def run_from_novel(
     novel_path: str | Path,
     *,
-    output_root: str | Path = "output",
+    output_root: str | Path = DEFAULT_OUTPUT_ROOT,
     work_id: Optional[str] = None,
     title: Optional[str] = None,
     episode_id: Optional[str] = None,
@@ -117,7 +124,7 @@ def run_from_novel(
             note("character_sheets", cast=len(doc["cast"]))
             orchestrator.visual.ensure_character_sheets(
                 doc["cast"],
-                output_root=root / wid,
+                output_root=project_dir(root, wid),
             )
             save_beats(bpath, doc)
 
@@ -137,7 +144,7 @@ def run_from_novel(
 
     # --- 4. bridge ---
     tpath = timeline_path(root, eid)
-    ep_root = root / eid
+    ep_root = episode_dir(root, eid)
     if resume and tpath.is_file():
         tl = load_timeline(tpath)
         note("timeline_resume", phase=tl.get("phase"))
@@ -235,8 +242,10 @@ def run_from_novel(
     final = ep_root / "final.mp4"
     if not skip_compose:
         note("compose")
-        assemble_episode(tl, output_path=final, work_dir=ep_root / "_compose")
-        save_timeline(tpath, tl)
+        try:
+            assemble_episode(tl, output_path=final, work_dir=ep_root / "_compose")
+        finally:
+            save_timeline(tpath, tl)
 
     note("done", final=str(final), phase=tl.get("phase"))
     return RunResult(

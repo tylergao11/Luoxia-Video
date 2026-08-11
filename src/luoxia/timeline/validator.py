@@ -12,6 +12,10 @@ from src.audio.performance import validate_performance
 from src.luoxia.catalog_limits import find_shot_video_model, resolve_video_duration_bounds
 from src.luoxia.paths import TIMELINE_SCHEMA_PATH
 from src.luoxia.timeline.transitions import CUT, DISSOLVE, head_room_s, tail_room_s, transition_of
+from src.luoxia.timeline.video_policy import (
+    ACTION_ARC_DURATION_TOLERANCE_S,
+    validate_video_acceptance_policy,
+)
 
 EPS = 1e-6
 FROZEN_PHASES = frozenset({"frozen", "rendering", "rendered"})
@@ -105,6 +109,18 @@ def _check_invariants(
     if not shots:
         return issues
 
+    if timeline.get("schema_version") == "1.3.0":
+        try:
+            validate_video_acceptance_policy(g.get("video_acceptance"))
+        except (TypeError, ValueError) as exc:
+            issues.append(
+                ValidationIssue(
+                    code="invalid_video_acceptance_policy",
+                    message=str(exc),
+                    invariant=19,
+                )
+            )
+
     # 3. first start_s == 0
     if not draft:
         first = shots[0].get("timing") or {}
@@ -126,6 +142,7 @@ def _check_invariants(
         audio = shot.get("audio") or {}
         dialogue = shot.get("dialogue") or {}
         still = shot.get("still") or {}
+        video = shot.get("video") or {}
         subtitle = shot.get("subtitle") or {}
 
         # 4. index contiguous
@@ -199,6 +216,34 @@ def _check_invariants(
                 )
             )
 
+        if timeline.get("schema_version") == "1.3.0":
+            direction = video.get("direction") or {}
+            request = video.get("request") or {}
+            if direction.get("playback_speed") == "slow_motion" and not request.get(
+                "allow_slow_motion"
+            ):
+                issues.append(
+                    ValidationIssue(
+                        code="slow_motion_not_authorized",
+                        message=(
+                            "direction.playback_speed=slow_motion requires "
+                            "video.request.allow_slow_motion=true"
+                        ),
+                        shot_id=sid,
+                        invariant=18,
+                    )
+                )
+            acceptance_status = (video.get("acceptance") or {}).get("status")
+            if video.get("status") == "done" and acceptance_status != "passed":
+                issues.append(
+                    ValidationIssue(
+                        code="done_without_acceptance",
+                        message="video.status=done requires video.acceptance.status=passed",
+                        shot_id=sid,
+                        invariant=19,
+                    )
+                )
+
         # 16a. transition kind and duration agree (checkable without solved timing)
         kind = str((shot.get("transition") or {}).get("kind") or CUT)
         declared = float((shot.get("transition") or {}).get("duration_s") or 0.0)
@@ -250,6 +295,25 @@ def _check_invariants(
                 )
             )
             continue
+
+        if timeline.get("schema_version") == "1.3.0":
+            arc = ((video.get("direction") or {}).get("action_arc") or [])
+            try:
+                arc_duration = sum(float(item["duration_s"]) for item in arc)
+            except (KeyError, TypeError, ValueError):
+                arc_duration = None
+            if arc_duration is None or abs(arc_duration - target) > ACTION_ARC_DURATION_TOLERANCE_S:
+                issues.append(
+                    ValidationIssue(
+                        code="action_arc_duration_mismatch",
+                        message=(
+                            f"direction.action_arc totals {arc_duration!r}s, "
+                            f"target_duration_s is {target}s"
+                        ),
+                        shot_id=sid,
+                        invariant=18,
+                    )
+                )
 
         # 1. end - start == target
         if abs((end - start) - target) > EPS:

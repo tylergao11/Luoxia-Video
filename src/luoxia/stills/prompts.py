@@ -8,6 +8,10 @@ from src.luoxia.beats.prompts import (
     VIDEO_MOTION_SYSTEM,
 )
 from src.luoxia.llm.client import LuoxiaLLM
+from src.luoxia.timeline.video_policy import (
+    ACTION_ARC_DURATION_TOLERANCE_S,
+    video_acceptance_policy,
+)
 
 
 def polish_timeline_prompts(
@@ -28,25 +32,92 @@ def polish_timeline_prompts(
         video = shot.setdefault("video", {})
         request = video.setdefault("request", {})
         if force_still or not still.get("prompt"):
-            still["prompt"] = _still_prompt(
+            if timeline.get("phase") in {"frozen", "rendering", "rendered"}:
+                raise ValueError(
+                    f"{shot.get('shot_id')}: still direction is frozen; unfreeze before editing"
+                )
+            old_still_prompt = still.get("prompt")
+            new_still_prompt = _still_prompt(
                 client,
                 timeline,
                 shot,
                 cast_brief,
                 strict=strict,
             )
-        if force_motion or not request.get("prompt"):
-            request["prompt"] = _motion_prompt(
+            if force_still or old_still_prompt != new_still_prompt:
+                _reset_still_render_state(still)
+                _reset_video_render_state(video)
+                request = video.setdefault("request", {})
+            still["prompt"] = new_still_prompt
+        needs_motion = force_motion or not request.get("prompt") or not video.get("direction")
+        if needs_motion:
+            if timeline.get("phase") in {"frozen", "rendering", "rendered"}:
+                raise ValueError(
+                    f"{shot.get('shot_id')}: motion direction is frozen; unfreeze before editing"
+                )
+            old_prompt = request.get("prompt")
+            old_direction = video.get("direction")
+            motion = _motion_contract(
                 client,
                 shot,
                 still.get("prompt") or "",
-                strict=strict,
             )
+            if force_motion or old_prompt != motion["prompt"] or old_direction != motion["direction"]:
+                _reset_video_render_state(video)
+                request = video.setdefault("request", {})
+            request["prompt"] = motion["prompt"]
+            video["direction"] = motion["direction"]
+            policy = video_acceptance_policy(timeline)
+            video["acceptance"] = {
+                "status": "pending",
+                "checker": policy["checker"],
+                "reasons": [],
+            }
         still.setdefault(
             "aspect_ratio",
             (timeline.get("global") or {}).get("aspect_ratio") or "16:9",
         )
     return timeline
+
+
+def _reset_video_render_state(video: Dict[str, Any]) -> None:
+    """A changed direction invalidates the old provider result and its verdict."""
+    checker = (video.get("acceptance") or {}).get("checker")
+    video["status"] = "pending"
+    video["attempts"] = 0
+    video["has_audio_track"] = False
+    video["audio_stripped"] = False
+    for key in (
+        "request_id",
+        "source_url",
+        "local_path",
+        "fetched_at",
+        "moderation_passed",
+        "mode",
+        "cost_usd",
+        "delivered_duration_s",
+        "required_duration_s",
+        "error_code",
+        "error",
+    ):
+        video.pop(key, None)
+    video.pop("direction", None)
+    video.setdefault("request", {}).pop("prompt", None)
+    if checker:
+        video["acceptance"] = {
+            "status": "pending",
+            "checker": checker,
+            "reasons": [],
+        }
+    else:
+        video.pop("acceptance", None)
+
+
+def _reset_still_render_state(still: Dict[str, Any]) -> None:
+    still["status"] = "pending"
+    still["attempts"] = 0
+    for key in ("asset_id", "local_path", "error"):
+        still.pop(key, None)
 
 
 def _still_prompt(
@@ -93,16 +164,24 @@ def _still_prompt(
         return seed or f"{context}, cinematic lighting, widescreen composition"
 
 
-def _motion_prompt(
+def _motion_contract(
     client: LuoxiaLLM,
     shot: Dict[str, Any],
     still_prompt: str,
-    *,
-    strict: bool = False,
-) -> str:
+) -> Dict[str, Any]:
     if not client.is_configured:
-        return _motion_fallback(shot)
+        raise RuntimeError(
+            f"{shot.get('shot_id')}: visual agent is not configured; "
+            "refusing to substitute a generic motion prompt"
+        )
     timing = shot.get("timing") or {}
+    target_duration = timing.get("target_duration_s")
+    if target_duration is None:
+        raise ValueError(
+            f"{shot.get('shot_id')}: target_duration_s missing before motion direction"
+        )
+    request = (shot.get("video") or {}).get("request") or {}
+    allow_slow_motion = bool(request.get("allow_slow_motion"))
     context = (
         (shot.get("dialogue") or {}).get("text")
         or (shot.get("subtitle") or {}).get("description")
@@ -118,7 +197,8 @@ def _motion_prompt(
                         f"shot_id={shot.get('shot_id')}\n"
                         f"shot_type={shot.get('type')}\n"
                         f"shot_size={shot.get('shot_size')}\n"
-                        f"target_duration_s={timing.get('target_duration_s')}\n"
+                        f"target_duration_s={target_duration}\n"
+                        f"allow_slow_motion={str(allow_slow_motion).lower()}\n"
                         f"台词或动作语境={context}\n"
                         f"静帧={still_prompt}"
                     ),
@@ -126,28 +206,89 @@ def _motion_prompt(
             ]
         )
         prompt = (data.get("prompt") or "").strip()
-        if strict and not prompt:
+        if not prompt:
             raise ValueError(f"{shot.get('shot_id')}: visual agent returned no motion prompt")
-        return prompt or _motion_fallback(shot)
-    except Exception:
-        if strict:
-            raise
-        return _motion_fallback(shot)
-
-
-def _motion_fallback(shot: Dict[str, Any]) -> str:
-    duration = float((shot.get("timing") or {}).get("target_duration_s") or 0.0)
-    shot_type = str(shot.get("type") or "action")
-    end = f"在约 {duration:g} 秒内完成，单镜头无切换"
-    if shot_type == "action":
-        return (
-            "人物从明确起势开始，脚步、重心、髋肩和手臂连续发力，"
-            f"动作峰值后出现清楚的结果与回震；{end}"
+        direction = _validate_direction(
+            data.get("direction"),
+            shot_id=str(shot.get("shot_id") or "unknown_shot"),
+            target_duration_s=float(target_duration),
+            allow_slow_motion=allow_slow_motion,
         )
-    if shot_type == "reaction":
-        return f"人物从原表情清晰转为震惊或压抑，视线与肩颈同步变化，动作克制可读；{end}"
-    if shot_type == "insert":
-        return f"关键物体或能量细节快速发生一次明确变化，峰值后保留短暂余韵；{end}"
-    if shot_type == "transition":
-        return f"环境中的光影与空间层次自然变化，建立场景而不做无意义匀速漂移；{end}"
-    return f"人物按台词情绪完成连续表情和肢体变化，背景角色保持克制但可见的反应；{end}"
+        return {"prompt": prompt, "direction": direction}
+    except Exception as exc:
+        raise RuntimeError(
+            f"{shot.get('shot_id')}: motion prompt generation failed; "
+            "refusing to substitute a generic prompt"
+        ) from exc
+
+
+def _validate_direction(
+    value: Any,
+    *,
+    shot_id: str,
+    target_duration_s: float,
+    allow_slow_motion: bool,
+) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{shot_id}: visual agent returned no direction contract")
+    playback_speed = value.get("playback_speed")
+    if playback_speed not in {"realtime", "slow_motion"}:
+        raise ValueError(f"{shot_id}: invalid direction.playback_speed={playback_speed!r}")
+    if playback_speed == "slow_motion" and not allow_slow_motion:
+        raise ValueError(
+            f"{shot_id}: slow_motion was not explicitly allowed by video.request"
+        )
+
+    camera = value.get("camera")
+    if not isinstance(camera, dict):
+        raise ValueError(f"{shot_id}: direction.camera missing")
+    missing_camera = [
+        key for key in ("kind", "speed", "path", "purpose")
+        if not str(camera.get(key) or "").strip()
+    ]
+    if missing_camera:
+        raise ValueError(
+            f"{shot_id}: direction.camera missing " + ", ".join(missing_camera)
+        )
+    if camera.get("speed") not in {"slow", "normal", "fast"}:
+        raise ValueError(f"{shot_id}: invalid camera.speed={camera.get('speed')!r}")
+
+    arc = value.get("action_arc")
+    if not isinstance(arc, list) or not 2 <= len(arc) <= 4:
+        raise ValueError(f"{shot_id}: direction.action_arc must contain 2-4 phases")
+    duration_sum = 0.0
+    normalized_arc = []
+    for index, item in enumerate(arc):
+        if not isinstance(item, dict):
+            raise ValueError(f"{shot_id}: action_arc[{index}] must be an object")
+        phase = str(item.get("phase") or "").strip()
+        action = str(item.get("action") or "").strip()
+        try:
+            duration = float(item.get("duration_s"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{shot_id}: action_arc[{index}].duration_s must be numeric"
+            ) from exc
+        if not phase or not action or duration <= 0:
+            raise ValueError(
+                f"{shot_id}: action_arc[{index}] requires phase, positive duration_s and action"
+            )
+        duration_sum += duration
+        normalized_arc.append(
+            {"phase": phase, "duration_s": duration, "action": action}
+        )
+    if abs(duration_sum - target_duration_s) > ACTION_ARC_DURATION_TOLERANCE_S:
+        raise ValueError(
+            f"{shot_id}: action_arc durations total {duration_sum:.3f}s, "
+            f"target is {target_duration_s:.3f}s"
+        )
+    return {
+        "playback_speed": playback_speed,
+        "camera": {
+            "kind": str(camera["kind"]).strip(),
+            "speed": camera["speed"],
+            "path": str(camera["path"]).strip(),
+            "purpose": str(camera["purpose"]).strip(),
+        },
+        "action_arc": normalized_arc,
+    }

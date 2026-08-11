@@ -47,6 +47,7 @@ from .models import (
     VideoTask,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
+from ...output_contract import OUTPUT
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
 from ...utils import setup_logging
 from fastapi.responses import JSONResponse
@@ -90,25 +91,9 @@ async def add_cache_control_header(request: Request, call_next):
         response.headers["Cache-Control"] = "public, max-age=86400"
     return response
 
-# Create output directory if it doesn't exist
-os.makedirs("output", exist_ok=True)
-os.makedirs("output/uploads", exist_ok=True)
-os.makedirs("output/video", exist_ok=True)
-os.makedirs("output/assets", exist_ok=True)
-
-# Mount static files with multiple aliases to handle plural/singular inconsistencies
-# Legacy paths in projects.json often use 'outputs/videos' or 'outputs/assets'
-app.mount("/files/outputs/videos", StaticFiles(directory="output/video"), name="files_outputs_videos")
-app.mount("/files/outputs/assets", StaticFiles(directory="output/assets"), name="files_outputs_assets")
-app.mount("/files/outputs", StaticFiles(directory="output"), name="files_outputs")
-app.mount("/files/videos", StaticFiles(directory="output/video"), name="files_videos")
-app.mount("/files/assets", StaticFiles(directory="output/assets"), name="files_assets")
-app.mount("/files", StaticFiles(directory="output"), name="files")
-
-# Ensure playground output directories exist
-os.makedirs("output/playground/images", exist_ok=True)
-os.makedirs("output/playground/videos", exist_ok=True)
-app.mount("/files/playground", StaticFiles(directory="output/playground"), name="files_playground")
+# The output contract owns directory creation and one canonical public URL shape.
+OUTPUT.ensure_studio_dirs()
+app.mount("/files", StaticFiles(directory=str(OUTPUT.root)), name="files")
 
 
 # Initialize pipeline
@@ -122,8 +107,9 @@ def debug_config():
         "oss_configured": uploader.is_configured,
         "oss_bucket_initialized": uploader.bucket is not None,
         "oss_base_path": os.getenv("OSS_BASE_PATH", "lumenx"),
-        "output_dir_exists": os.path.exists("output"),
-        "output_contents": os.listdir("output") if os.path.exists("output") else [],
+        "output_root": str(OUTPUT.root),
+        "output_dir_exists": OUTPUT.root.is_dir(),
+        "output_contents": sorted(path.name for path in OUTPUT.root.iterdir()),
         "cwd": os.getcwd(),
         "env_vars_present": {
             "OSS_ENDPOINT": bool(os.getenv("OSS_ENDPOINT")),
@@ -370,7 +356,7 @@ def upload_file(file: UploadFile = File(...)):
     try:
         file_ext = os.path.splitext(file.filename)[1]
         filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path = os.path.join(OUTPUT.uploads, filename)
 
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -380,8 +366,7 @@ def upload_file(file: UploadFile = File(...)):
         if oss_url:
             return signed_response({"url": oss_url})
 
-        # Fallback to local URL (relative path for frontend getAssetUrl)
-        return {"url": f"uploads/{filename}"}
+        return {"url": OUTPUT.relative_posix(file_path)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -412,7 +397,7 @@ def upload_asset(
         # 1. Save file locally first
         file_ext = os.path.splitext(file.filename)[1]
         filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path = os.path.join(OUTPUT.uploads, filename)
         
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -421,7 +406,7 @@ def upload_asset(
         uploader = OSSImageUploader()
         oss_url = uploader.upload_image(file_path)
         if not oss_url:
-            oss_url = f"uploads/{filename}"  # Fallback to local path
+            oss_url = OUTPUT.relative_posix(file_path)
         
         # 3. Update asset with new variant
         updated_script = pipeline.add_uploaded_asset_variant(
@@ -696,7 +681,7 @@ def luoxia_upload_cast_reference(
     ext = os.path.splitext(file.filename or "ref.png")[1].lower() or ".png"
     if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
         raise HTTPException(status_code=415, detail="image only: jpg/png/webp")
-    tmp_dir = os.path.join("output", "uploads")
+    tmp_dir = str(OUTPUT.uploads)
     os.makedirs(tmp_dir, exist_ok=True)
     tmp_path = os.path.join(tmp_dir, f"cast_ref_{uuid.uuid4().hex}{ext}")
     try:
@@ -1199,10 +1184,10 @@ def create_library_asset(request: CreateLibraryAssetRequest):
 def upload_library_asset_image(file: UploadFile = File(...)):
     """Upload an image to use as a global library asset's master image.
 
-    Saves the file under output/uploads/ (served via the /files static mount)
+    Saves the file under the contract-owned Studio uploads directory
     and returns {"image_url": <path-or-URL the frontend can load>}. When OSS
     is configured the returned URL is the (signed) OSS URL; otherwise a local
-    relative path "uploads/<name>" resolvable through the frontend's
+    contract-relative path resolvable through the frontend's
     getAssetUrl helper. The caller then passes this image_url to
     POST /library/assets (image_url=...) or PATCH /library/assets/{type}/{id}
     to attach it to a library asset. Mirrors the generic /upload endpoint but
@@ -1211,14 +1196,14 @@ def upload_library_asset_image(file: UploadFile = File(...)):
     try:
         file_ext = os.path.splitext(file.filename or "")[1]
         filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path = os.path.join(OUTPUT.uploads, filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         # Prefer OSS when configured (signed), else fall back to local path.
         oss_url = OSSImageUploader().upload_image(file_path)
         if oss_url:
             return signed_response({"image_url": oss_url})
-        return {"image_url": f"uploads/{filename}"}
+        return {"image_url": OUTPUT.relative_posix(file_path)}
     except Exception as e:
         logger.exception("upload_library_asset_image failed")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3039,7 +3024,7 @@ def voice_preview(request: VoicePreviewRequest):
 
     Cache key includes the speech compiler contract plus every request input. First
     call triggers the selected provider and writes a WAV (Qwen3/xAI) or MP3
-    (legacy DashScope) under output/cache/voice_preview/. Subsequent identical calls
+    (legacy DashScope) under studio/cache/voice_preview/. Subsequent identical calls
     return the cached URL instantly.
 
     PR-3h #2: handles CUSTOM voices (clones/designs) by looking up
@@ -3060,7 +3045,7 @@ def voice_preview(request: VoicePreviewRequest):
     model_override = custom.target_model if custom else None
     family_override = custom.family if custom else None
 
-    cache_dir = "output/cache/voice_preview"
+    cache_dir = str(OUTPUT.cache / "voice_preview")
     os.makedirs(cache_dir, exist_ok=True)
     from src.audio.performance import SPEECH_RENDER_CONTRACT
 
@@ -3088,10 +3073,9 @@ def voice_preview(request: VoicePreviewRequest):
             logger.error(f"[/voice/preview] TTS error voice={request.voice_id}: {e}")
             raise HTTPException(status_code=500, detail=f"TTS generation failed: {e}")
 
-    # Static mount /files maps to output/, so the relative path under output/
-    # becomes the URL path frontend can hit. signed_response wraps for OSS
+    # The canonical /files mount maps to OUTPUT.root. signed_response wraps for OSS
     # signing when configured, no-op otherwise.
-    url = f"cache/voice_preview/{cache_key}{extension}"
+    url = OUTPUT.relative_posix(cache_path)
     return signed_response({"url": url, "cached": cached})
 
 
@@ -3646,7 +3630,7 @@ def upload_frame_image(script_id: str, frame_id: str, file: UploadFile = File(..
         # Save file locally first
         file_ext = os.path.splitext(file.filename)[1]
         filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path = os.path.join(OUTPUT.uploads, filename)
 
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -3694,8 +3678,8 @@ async def upload_t2i_frame(script_id: str, frame_id: str, file: UploadFile = Fil
         # Stream-to-disk with explicit byte cap so we never load >8 MB
         # into memory if a client lies about Content-Length.
         filename = f"t2i_{uuid.uuid4().hex}{ext}"
-        rel_path = os.path.join("uploads", filename)
-        abs_path = os.path.join("output", rel_path)
+        abs_path = os.path.join(OUTPUT.uploads, filename)
+        rel_path = OUTPUT.relative_posix(abs_path)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
         size = 0
         try:

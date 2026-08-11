@@ -12,8 +12,8 @@
 ## 1. 存放位置
 
 ```
-output/<episode_id>/timeline.json          # 工作副本
-output/<episode_id>/timeline.frozen.json   # 冻结快照，只读
+output/episodes/<episode_id>/timeline.json          # 工作副本
+output/episodes/<episode_id>/timeline.frozen.json   # 冻结快照，只读
 ```
 
 ## 2. 两阶段提交模型
@@ -54,6 +54,18 @@ draft ──► audio_locked ──► frozen ──► rendering ──► rend
 
 阶段二换本地模型后可直接控制 `num_frames`，届时 `request_duration_s` 退化为等于 `ceil(target)` 但 trim 精度提升到帧级。契约不需要变。
 
+### 视频方向与验收是两份不同证据
+
+`video.direction` 是导演意图，不是自由文本备注：
+
+- `playback_speed` 默认且通常必须是 `realtime`；只有人工在 `video.request.allow_slow_motion=true` 明确授权时才允许 `slow_motion`。
+- `camera` 同时声明运镜种类、速度、路径和叙事目的。只写“推镜”“平移”不算完整调度。
+- `action_arc` 用 2–4 个阶段写出可见动作，每段都有 `duration_s`，总和必须等于 `timing.target_duration_s`。一次眨眼、呼吸或轻微对视不能撑满长镜头。
+
+`video.acceptance` 是生成结果的客观证据。在线链路不自造视觉指标，直接复用 FFmpeg `freezedetect`：先按 `global.video_acceptance` 中冻结的阈值探测实际会进入成片的窗口，再记录片长、近静止区间和失败原因。`status=passed` 才能把任务标成 `done/completed`，也才允许被选中或合成。
+
+VBench 的 dynamic degree / motion smoothness 和 VideoScore 可作为未来的可插拔候选重排器；它们需要视觉模型权重和较重依赖，不进入每镜必跑的基础门。基础门只回答“这个结果是否明显死掉”，不假装代替人类审美排序。
+
 ## 4. 不变量（校验器必须逐条检查）
 
 以下每一条都可以机器校验，实现校验器时按此清单写：
@@ -74,6 +86,9 @@ draft ──► audio_locked ──► frozen ──► rendering ──► rend
 14. `phase >= frozen` 时，`timeline_hash` 与 `frozen_at` 非空
 15. 字幕区间必须包含在镜头区间内：`start_s <= subtitle.start_s` 且 `subtitle.end_s <= end_s`
 16. 转场必须落在无台词的留白区间内（详见第 10 节）：`kind == "cut"` 时 `duration_s == 0`，其余 `duration_s > 0`；`dissolve` 不得出现在末镜；`duration_s` 不得超过所占用的留白
+17. `dialogue.performance` 的文本哈希、字符范围和事件位置必须与当前 `dialogue.text` 一致
+18. `video.direction.action_arc[].duration_s` 之和必须等于 `timing.target_duration_s`；未授权的 `slow_motion` 非法
+19. `video.status == "done"` 时 `video.acceptance.status` 必须为 `passed`
 
 `phase == "draft"` 是例外。草稿由 `beats-bridge` 生成，此时还没跑 TTS，所有时长字段按设计就是空的——拿完整契约去校验它只会报一屏「缺少 start_s」。所以校验器对草稿走一档放宽档位：放开 `timing` 的必填约束，只跑第 4、9、10、12、13 条这些与时长无关的结构检查。拼错 `character_id`、画幅和 `global` 对不上，依然会在花掉第一分钱之前被拦下。
 
@@ -110,6 +125,8 @@ draft ──► audio_locked ──► frozen ──► rendering ──► rend
 6. slack = request - target
    trim.strategy 默认 "tail"，trim.tail_s = slack
    （"hold_last_frame" 仅用于需要留住定格情绪的镜头，由分镜显式指定）
+   供应商实交片长若比合成所需片长短超过一帧容差：
+   video.status = "failed"，error_code = "short_clip"，禁止冻结补帧或继续合成。
 
 7. 排布主时间线：
       start_s = 前一镜头的 end_s（首镜为 0）
@@ -151,7 +168,7 @@ draft ──► audio_locked ──► frozen ──► rendering ──► rend
 - `shot_size` 为 `close_up` 或 `extreme_close_up`，且
 - `target_duration_s > 3.0`
 
-其余镜头一律 `status: "skipped"`。命中的镜头在云端动作底片完成后，由主链路调用本地 MuseTalk 1.5，以已经锁定的音频逐帧重做嘴部并替换 `local_path`。口型失败会明确写入状态，但仍不得让一条镜头阻塞整集合成。
+其余镜头一律 `status: "skipped"`。命中的镜头在云端动作底片完成后，由主链路调用本地 MuseTalk 1.5，以已经锁定的音频逐帧重做嘴部并替换 `local_path`。必需口型失败会明确写入状态并中止合成；不得把未对齐版本当成成功产物继续交付。
 
 ## 7. 成本估算
 
@@ -203,6 +220,13 @@ Grok 当前费率见 `02-PROVIDER-CONTRACT.md`。费率写在 provider 适配器
 
 旧文件只有 `dialogue.emotion` 时仍可运行：TTS 边界会把自由文本保守地编译为局部片段；每个片段最多一个样式、全句最多一个事件。供应商控制标签从不写入 `dialogue.text`、字幕或口型文本。
 
+### 1.2.0 → 1.3.0（新增视频方向与验收契约）
+
+- 新时间线在 `global.video_acceptance` 固化 FFmpeg 验收器和阈值，避免运行时存在第二套隐藏配置。
+- `video.direction` 把正常/慢放、运镜路径与目的、分阶段动作弧从 prompt 中提成机器可校验字段。
+- `video.acceptance` 保存 FFmpeg `freezedetect` 的实测证据。片长不足或近静止区间超限时直接失败，禁止冻帧补足、禁止把失败候选设为完成。
+- `1.0.0`–`1.2.0` 文件仍可读取；进入新版生成前需由视觉导演补齐 1.3.0 字段并显式升级版本，系统不会猜一份动作方向代替它。
+
 ## 10. 转场与字幕位置
 
 ### 转场是剪辑决策，不是提示词
@@ -234,8 +258,8 @@ Grok 当前费率见 `02-PROVIDER-CONTRACT.md`。费率写在 provider 适配器
   两镜各自长度不变，主时钟完全不动
 
 叠化（dissolve）
-  前镜片段延长 d 秒，多出来的画面取自 trim 丢弃的 slack 帧
-  （余料不够则 tpad 定格最后一帧，绝不缩短镜头）
+  前镜片段延长 d 秒，多出来的画面只能取自 trim 丢弃的 slack 帧
+  （余料不够即契约失败：缩短或取消叠化，禁止 tpad 定格补帧）
   xfade 的 offset = target_前，重叠区正好落在 [start_后, start_后 + d]
   拼接后总长 = (target_前 + d) + target_后 - d = target_前 + target_后  ✓
   重叠区在前镜 target 窗口之外，因此前镜台词不受影响，

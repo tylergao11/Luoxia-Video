@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.utils.oss_utils import OSSImageUploader
+from src.output_contract import OUTPUT
 
 
 
@@ -33,6 +34,8 @@ def is_migratable_path(value: str, uploader) -> bool:
     
     # Case 1: Explicit local path
     local_prefixes = (
+        "studio/media/assets/", "studio/media/storyboard/", "studio/media/video/",
+        "studio/media/audio/", "studio/media/exports/", "studio/media/uploads/",
         "assets/", "storyboard/", "video/", "audio/", "export/", "uploads/",
         "outputs/videos/",  # Legacy plural path
     )
@@ -58,7 +61,7 @@ def migrate_value(value, uploader, output_dir, stats):
             
             if value.startswith(f"{base_path}/"):
                 # Convert OSS key back to local path for upload
-                # e.g., lumenx/assets/characters/foo.png -> output/assets/characters/foo.png
+                # e.g., lumenx/assets/characters/foo.png -> managed local media path
                 local_rel_path = value[len(base_path)+1:]
                 local_path = os.path.join(output_dir, local_rel_path)
             else:
@@ -131,8 +134,8 @@ def main():
 
     
     # Load projects.json
-    output_dir = "output"
-    projects_path = os.path.join(output_dir, "projects.json")
+    output_dir = str(OUTPUT.root)
+    projects_path = str(OUTPUT.state / "projects.json")
     
     if not os.path.exists(projects_path):
         print(f"ERROR: {projects_path} not found.")

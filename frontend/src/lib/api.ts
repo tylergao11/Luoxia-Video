@@ -140,6 +140,19 @@ export interface VideoTask {
     ratio?: string;
     /** Failure reason set by pipeline / cancel / orphan recovery. */
     error?: string | null;
+    /** Objective duration / near-static acceptance verdict from the backend. */
+    acceptance?: {
+        status: "pending" | "passed" | "failed";
+        checker: string;
+        checked_at?: string | null;
+        reasons: string[];
+        observed?: {
+            delivered_duration_s: number;
+            required_duration_s: number;
+            max_freeze_segment_s: number;
+            freeze_segments: Array<{ start_s: number; end_s: number; duration_s: number }>;
+        } | null;
+    } | null;
     /** User-starred shortlist flag (multi-select per shot) — set via
      *  PATCH /annotate. Optional on the wire so older task records
      *  parse unchanged. */

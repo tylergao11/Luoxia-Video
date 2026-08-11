@@ -12,8 +12,9 @@ load_env_once()
 
 from src.luoxia.stills.characters import HONGGUO_STYLE_LOCK, SHEET_NEGATIVE  # noqa: E402
 from src.models.xai_image import XaiImageModel  # noqa: E402
+from src.output_contract import OUTPUT  # noqa: E402
 
-ROOT = Path("output/doupo_moyan")
+ROOT = OUTPUT.sample_dir("doupo_moyan")
 REFS = ROOT / "refs"
 CHARS = ROOT / "characters"
 STILLS = ROOT / "stills"

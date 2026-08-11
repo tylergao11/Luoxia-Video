@@ -1,6 +1,0 @@
-file 'shots/01_charge.mp4'
-file 'shots/02_release.mp4'
-file 'shots/03_flight.mp4'
-file 'shots/04_enemy_reaction.mp4'
-file 'shots/05_contact.mp4'
-file 'shots/06_aftermath.mp4'

@@ -9,6 +9,7 @@ from difflib import SequenceMatcher
 from typing import List, Dict, Any, Optional
 
 from .models import Script, Character, Scene, Prop, StoryboardFrame, GenerationStatus
+from ...output_contract import OUTPUT
 
 
 def _strip_markdown_json(content: str) -> str:
@@ -68,7 +69,7 @@ def _is_echo(result_en: str, draft_en: str, threshold: float = 0.95) -> bool:
 def _resolve_image_for_vision(url: str) -> Optional[str]:
     """把任意形式的图像 URL 规整成 vision API 能直接消费的形式。
       - 已是 http(s):// 或 data:image/ → 原样返回（DashScope 能 fetch / 已内联）
-      - 看起来是相对路径（output/* 或 /files/* 或裸文件名）→ 读本地文件做 base64 data URI
+      - 合同内相对路径或 /files/* → 读本地文件做 base64 data URI
       - 找不到本地文件 → 返回 None，调用方应跳过这一张
     DashScope 无法访问 localhost 或私有 OSS 路径，所以本地路径必须 inline。"""
     import base64
@@ -79,20 +80,13 @@ def _resolve_image_for_vision(url: str) -> Optional[str]:
         return None
     if s.startswith("http://") or s.startswith("https://") or s.startswith("data:image/"):
         return s
-    # 规整：'/files/foo/bar.png' → 'foo/bar.png'；'output/foo.png' 原样
-    cleaned = s
-    for prefix in ("/files/outputs/", "/files/output/", "/files/", "files/", "output/"):
-        if cleaned.startswith(prefix):
-            cleaned = cleaned[len(prefix):]
-            break
-    candidates = [
-        os.path.join("output", cleaned),
-        cleaned,
-    ]
-    abs_path = next((p for p in candidates if os.path.exists(p) and os.path.isfile(p)), None)
-    if not abs_path:
+    try:
+        abs_path = OUTPUT.resolve(s)
+    except ValueError:
         return None
-    ext = os.path.splitext(abs_path)[1].lower()
+    if not abs_path.is_file():
+        return None
+    ext = abs_path.suffix.lower()
     mime = {
         ".png": "image/png",
         ".jpg": "image/jpeg",
@@ -101,7 +95,7 @@ def _resolve_image_for_vision(url: str) -> Optional[str]:
         ".gif": "image/gif",
     }.get(ext, "image/png")
     try:
-        with open(abs_path, "rb") as fh:
+        with abs_path.open("rb") as fh:
             b64 = base64.b64encode(fh.read()).decode("ascii")
         return f"data:{mime};base64,{b64}"
     except OSError:

@@ -2,8 +2,14 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from src.output_contract import OUTPUT
+
 
 LOCAL_MEDIA_PREFIXES = (
+    "studio/",
+    "projects/",
+    "episodes/",
+    "samples/",
     "assets/",
     "storyboard/",
     "video/",
@@ -30,7 +36,7 @@ def _project_root(project_root: Optional[str] = None) -> Path:
 
 
 def _output_root(project_root: Optional[str] = None) -> Path:
-    return _project_root(project_root) / "output"
+    return _project_root(project_root) / "output" if project_root else OUTPUT.root
 
 
 def _is_under(path: Path, parent: Path) -> bool:

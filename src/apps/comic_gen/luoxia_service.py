@@ -6,7 +6,7 @@ Authority:
 
 Identity layout (aligned with pipeline._resolve_duration_from_timeline):
   work_id    = series_id if present else script_id
-  episode_id = script_id   (timeline lives at output/<script_id>/timeline.json)
+  episode_id = script_id   (timeline lives at output/episodes/<script_id>/timeline.json)
 """
 from __future__ import annotations
 
@@ -30,13 +30,20 @@ from src.luoxia.beats.selector import select_beats
 from src.luoxia.beats.to_timeline import BridgeError, build_timeline_draft
 from src.luoxia.beats.validator import BeatsValidationError, validate_beats
 from src.luoxia.llm.client import LuoxiaLLM
-from src.luoxia.paths import beats_path, timeline_frozen_path, timeline_path
+from src.luoxia.paths import (
+    beats_path,
+    episode_dir,
+    project_dir,
+    timeline_frozen_path,
+    timeline_path,
+)
 from src.luoxia.timeline.freeze import BudgetExceededError, freeze_timeline
 from src.luoxia.timeline.io import load_timeline, save_timeline
 from src.luoxia.timeline.solver import solve_timeline
 from src.luoxia.timeline.validator import TimelineValidationError, validate_timeline
+from src.output_contract import OUTPUT
 
-OUTPUT_ROOT = Path("output")
+OUTPUT_ROOT = OUTPUT.root
 
 
 def work_id_for(script: Script) -> str:
@@ -58,21 +65,12 @@ def _tpath(script: Script) -> Path:
 def _media_url(local_path: Optional[str]) -> Optional[str]:
     if not local_path:
         return None
-    p = Path(local_path)
-    # Prefer relative path under output/ for /files static mount.
-    try:
-        rel = p.as_posix()
-        if rel.startswith("output/"):
-            return f"/files/{rel[len('output/'):]}"
-        # Absolute under cwd/output
-        cwd_out = (Path.cwd() / "output").resolve()
-        resolved = p.resolve()
-        if str(resolved).startswith(str(cwd_out)):
-            return f"/files/{resolved.relative_to(cwd_out).as_posix()}"
-    except Exception:
-        pass
-    name = p.name
-    return f"/files/{name}" if name else None
+    raw = str(local_path).strip()
+    if raw.startswith(("http://", "https://", "blob:", "data:", "/files/")):
+        return raw
+    path = Path(raw)
+    resolved = path.resolve() if path.is_absolute() else OUTPUT.resolve(path)
+    return OUTPUT.public_url(resolved)
 
 
 def _ensure_episode_id(doc: Dict[str, Any], script: Script) -> str:
@@ -156,7 +154,7 @@ def public_status(script: Script) -> Dict[str, Any]:
                     "audio_url": _media_url((s.get("audio") or {}).get("local_path")),
                 }
             )
-    ep_root = OUTPUT_ROOT / episode_id_for(script)
+    ep_root = episode_dir(OUTPUT_ROOT, episode_id_for(script))
     final_path = ep_root / "final.mp4"
     return {
         "work_id": work_id_for(script),
@@ -313,7 +311,7 @@ def solve_audio(script: Script) -> Tuple[Dict[str, Any], Script]:
     from src.luoxia.rewrite import make_rewrite_fn
     from src.luoxia.speech import make_tts_synthesize
 
-    ep_root = OUTPUT_ROOT / episode_id_for(script)
+    ep_root = episode_dir(OUTPUT_ROOT, episode_id_for(script))
     synthesize = make_tts_synthesize(ep_root, tl)
 
     llm = LuoxiaLLM()
@@ -348,7 +346,7 @@ def update_cast_reference(
     doc = load_beats_doc(script)
     if not doc:
         raise FileNotFoundError("beats.json missing")
-    dest_dir = OUTPUT_ROOT / work_id_for(script) / "characters"
+    dest_dir = project_dir(OUTPUT_ROOT, work_id_for(script)) / "characters"
     dest_dir.mkdir(parents=True, exist_ok=True)
     ext = Path(source_file).suffix or ".png"
     dest = dest_dir / f"{character_id}{ext}"
@@ -432,7 +430,7 @@ def _sync_script_from_luoxia(
                     duration=int(req_dur) if req_dur is not None else None,
                     image_url=still_url,
                     image_prompt=prompt,
-                    video_prompt=(video.get("request") or {}).get("prompt") or prompt,
+                    video_prompt=(video.get("request") or {}).get("prompt"),
                     video_url=video_url,
                     audio_url=audio_url,
                     status=GenerationStatus.COMPLETED if video_url or still_url else GenerationStatus.PENDING,
@@ -441,7 +439,7 @@ def _sync_script_from_luoxia(
         if frames:
             script.frames = frames
 
-        final = OUTPUT_ROOT / episode_id_for(script) / "final.mp4"
+        final = episode_dir(OUTPUT_ROOT, episode_id_for(script)) / "final.mp4"
         if final.is_file():
             script.merged_video_url = _media_url(str(final))
 

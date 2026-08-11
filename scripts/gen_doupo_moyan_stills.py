@@ -11,8 +11,9 @@ from src.luoxia.env import load_env_once
 load_env_once()
 
 from src.models.xai_image import XaiImageModel  # noqa: E402
+from src.output_contract import OUTPUT  # noqa: E402
 
-root = Path("output/doupo_moyan")
+root = OUTPUT.sample_dir("doupo_moyan")
 for p in [root / "characters", root / "stills", root / "video", root / "audio"]:
     p.mkdir(parents=True, exist_ok=True)
 

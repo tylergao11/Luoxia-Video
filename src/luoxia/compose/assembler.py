@@ -12,8 +12,8 @@ from src.luoxia.compose.subtitles import (
     style_for_frame,
     write_ass,
 )
-from src.luoxia.media.ffprobe import measure_media_duration_s
 from src.luoxia.media.geometry import frame_size
+from src.luoxia.render.acceptance import require_timeline_shot
 from src.luoxia.timeline.freeze import assert_writable_for_render
 from src.luoxia.timeline.transitions import (
     SegmentPlan,
@@ -21,10 +21,8 @@ from src.luoxia.timeline.transitions import (
     plan_segments,
     total_duration_s,
 )
+from src.luoxia.timeline.validator import validate_timeline
 from src.utils.system_check import get_ffmpeg_path
-
-# Roughly one frame at 24-25fps. Below this a clip is short only by rounding.
-SHORT_CLIP_TOLERANCE_S = 0.04
 
 
 def assemble_episode(
@@ -35,6 +33,7 @@ def assemble_episode(
 ) -> Path:
     """Trim slack, mux TTS, burn subtitles, apply transitions, concat by target timeline."""
     assert_writable_for_render(timeline)
+    validate_timeline(timeline)
     for shot in timeline["shots"]:
         video = shot.get("video") or {}
         if video.get("has_audio_track") and not video.get("audio_stripped"):
@@ -53,6 +52,12 @@ def assemble_episode(
 
     style = resolve_style(timeline)
     plans = plan_segments(timeline)
+    for plan in plans:
+        require_timeline_shot(
+            timeline,
+            plan.shot,
+            required_duration_s=plan.segment_duration_s,
+        )
     fps = int((timeline.get("global") or {}).get("fps") or 24)
     # Providers round sizes their own way — asking grok for 1080p returns 1920x1088 — and
     # the concat demuxer copies streams, so segments that disagree on size or fps produce a
@@ -69,6 +74,7 @@ def assemble_episode(
         _concat_copy(ffmpeg, segments, work=work, out=out)
 
     timeline["phase"] = "rendered"
+    validate_timeline(timeline)
     return out
 
 
@@ -176,15 +182,6 @@ def _build_segment(
         f"fps={fps}",
         "setsar=1",
     ]
-    # Providers do not honour the requested duration reliably — a 10s request can come
-    # back as a 6s clip. Without this the segment silently ends early, the episode drifts
-    # off the master clock and the tail of the line plays over the next shot. Hold the
-    # last frame instead, and record it so a short clip is visible rather than inferred.
-    available = max(0.0, measure_media_duration_s(src) - head)
-    shortfall = seg_len - available
-    if shortfall > SHORT_CLIP_TOLERANCE_S:
-        vf_parts.append(f"tpad=stop_mode=clone:stop_duration={_fmt(shortfall)}")
-        _record_short_clip(shot, requested=seg_len, available=available)
 
     ass = _write_shot_ass(shot, work, style=style, frame=frame)
     if ass is not None:
@@ -250,24 +247,34 @@ def _expects_speech(shot: Dict[str, Any]) -> bool:
     return bool(dialogue.get("text")) or shot.get("timing_driver") == "audio"
 
 
-def _record_short_clip(shot: Dict[str, Any], *, requested: float, available: float) -> None:
-    """Note on the shot that its clip was padded, so the shortfall is auditable."""
-    video = shot.setdefault("video", {})
-    video["padded_from_s"] = round(available, 3)
-    video["padded_to_s"] = round(requested, 3)
-
-
 def short_clips(timeline: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Shots whose provider clip was shorter than the timeline required."""
-    return [
-        {
-            "shot_id": s.get("shot_id"),
-            "delivered_s": (s.get("video") or {}).get("padded_from_s"),
-            "required_s": (s.get("video") or {}).get("padded_to_s"),
-        }
-        for s in timeline.get("shots") or []
-        if (s.get("video") or {}).get("padded_from_s") is not None
-    ]
+    rejected: List[Dict[str, Any]] = []
+    for shot in timeline.get("shots") or []:
+        video = shot.get("video") or {}
+        reasons = list((video.get("acceptance") or {}).get("reasons") or [])
+        delivered = video.get("delivered_duration_s")
+        required = video.get("required_duration_s")
+        # Read old artifacts without continuing their freeze-padding behaviour.
+        if delivered is None:
+            delivered = video.get("padded_from_s")
+        if required is None:
+            required = video.get("padded_to_s")
+        if delivered is None:
+            continue
+        is_short = any(reason.startswith("short_clip:") for reason in reasons)
+        if not is_short and required is not None:
+            is_short = float(delivered) < float(required)
+        if not is_short:
+            continue
+        rejected.append(
+            {
+                "shot_id": shot.get("shot_id"),
+                "delivered_s": delivered,
+                "required_s": required,
+            }
+        )
+    return rejected
 
 
 def _write_shot_ass(

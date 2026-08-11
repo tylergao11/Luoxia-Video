@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.2.0",
+  "schema_version": "1.3.0",
   "project_id": "luoxia_demo",
   "episode_id": "ep01",
   "title": "第一集 · 重逢",
@@ -15,6 +15,13 @@
     "min_speed_ratio": 0.92,
     "max_speed_ratio": 1.1,
     "default_action_duration_s": 4,
+    "video_acceptance": {
+      "checker": "ffmpeg_freezedetect",
+      "duration_tolerance_s": 0.04,
+      "freeze_noise_db": -35.0,
+      "freeze_min_duration_s": 0.5,
+      "max_freeze_segment_s": 1.0
+    },
     "subtitle_style": {
       "font_name": "Source Han Sans SC",
       "font_size_px": null,
@@ -76,10 +83,30 @@
         "status": "pending",
         "provider": "xai",
         "model": "grok-imagine-video-1.5",
+        "direction": {
+          "playback_speed": "realtime",
+          "camera": {
+            "kind": "push_in",
+            "speed": "slow",
+            "path": "从街口广角缓慢推向积水倒影，始终保持穿过画面的行人和雨势可读",
+            "purpose": "建立暴雨街巷空间并用行人经过把静态空镜变成有起承转合的环境动作"
+          },
+          "action_arc": [
+            { "phase": "setup", "duration_s": 1.0, "action": "正常实时速度，密集雨滴击中积水，连续涟漪向外扩散" },
+            { "phase": "peak", "duration_s": 2.0, "action": "一名撑伞行人从画面右侧快步穿过，鞋底溅起水花，风吹动招牌" },
+            { "phase": "resolve", "duration_s": 1.0, "action": "行人离开画面，水花回落，霓虹倒影被新一轮雨滴打碎" }
+          ]
+        },
+        "acceptance": {
+          "status": "pending",
+          "checker": "ffmpeg_freezedetect",
+          "reasons": []
+        },
         "request": {
           "duration": 4,
           "resolution": "1080p",
-          "prompt": "缓慢推镜，雨滴打在积水上泛起涟漪，霓虹光轻微闪烁"
+          "allow_slow_motion": false,
+          "prompt": "正常实时速度。0–1秒密集雨滴击中积水形成连续涟漪；1–3秒撑伞行人从右侧快步穿过并溅起水花，风吹动招牌；3–4秒行人出画，水花回落。摄影机从街口缓慢推向倒影，运镜服务于空间建立和动作可读。"
         },
         "has_audio_track": false,
         "audio_stripped": false,
@@ -143,10 +170,30 @@
         "status": "pending",
         "provider": "xai",
         "model": "grok-imagine-video-1.5",
+        "direction": {
+          "playback_speed": "realtime",
+          "camera": {
+            "kind": "push_in",
+            "speed": "fast",
+            "path": "从近景快速推到林晚眼睛并停住",
+            "purpose": "把认出对方的瞬间压成清楚的表情转折而非长时间发呆"
+          },
+          "action_arc": [
+            { "phase": "setup", "duration_s": 0.5, "action": "正常实时速度，林晚听见声音立即抬眼，视线从地面切向前方" },
+            { "phase": "peak", "duration_s": 1.0, "action": "她瞳孔收紧并向前迈半步，肩膀随急促吸气明显抬起" },
+            { "phase": "resolve", "duration_s": 0.72, "action": "她停步直视来人，下颌绷紧，惊讶转为警惕" }
+          ]
+        },
+        "acceptance": {
+          "status": "pending",
+          "checker": "ffmpeg_freezedetect",
+          "reasons": []
+        },
         "request": {
           "duration": 3,
           "resolution": "1080p",
-          "prompt": "极轻微的呼吸起伏，睫毛颤动，镜头几乎静止"
+          "allow_slow_motion": false,
+          "prompt": "正常实时速度。0–0.5秒林晚立即抬眼；0.5–1.5秒她瞳孔收紧、向前迈半步并急促吸气；1.5–2.22秒她停步直视来人，下颌绷紧。摄影机快速推到眼睛后停住，突出惊讶转警惕的完整反应。"
         },
         "has_audio_track": false,
         "audio_stripped": false,
@@ -211,10 +258,31 @@
         "status": "pending",
         "provider": "xai",
         "model": "grok-imagine-video-1.5",
+        "direction": {
+          "playback_speed": "realtime",
+          "camera": {
+            "kind": "track",
+            "speed": "normal",
+            "path": "从沈策侧后方跟随到侧面中景，末段绕到能同时看见林晚反应的位置",
+            "purpose": "用行走、停步和转身承载长台词的内部节奏，并在结尾交代两人关系"
+          },
+          "action_arc": [
+            { "phase": "setup", "duration_s": 2.0, "action": "正常实时速度，沈策沿屋檐向前走两步，握伞的手收紧，目光始终避开林晚" },
+            { "phase": "development", "duration_s": 4.0, "action": "他边说边减速，空手先指向旧街又收回胸前，肩背从僵硬逐渐放松" },
+            { "phase": "peak", "duration_s": 2.4, "action": "他突然停步转身直面林晚，抬眼完成最重的一句，雨伞随重心转动甩开水珠" },
+            { "phase": "resolve", "duration_s": 1.0, "action": "他放低手臂等待回答，林晚在画面远处明显后退半步" }
+          ]
+        },
+        "acceptance": {
+          "status": "pending",
+          "checker": "ffmpeg_freezedetect",
+          "reasons": []
+        },
         "request": {
           "duration": 10,
           "resolution": "1080p",
-          "prompt": "极缓慢的侧向平移，雨丝持续下落，人物几乎静止只有肩膀微动"
+          "allow_slow_motion": false,
+          "prompt": "正常实时速度。0–2秒沈策沿屋檐走两步并握紧伞柄；2–6秒他边说边减速，手势从指向旧街收回胸前；6–8.4秒他停步转身直面林晚，雨伞随重心甩开水珠；8.4–9.4秒他放低手臂等待，林晚后退半步。摄影机正常速度侧后跟拍，末段绕到两人关系位。"
         },
         "has_audio_track": false,
         "audio_stripped": false,
@@ -289,10 +357,47 @@
         "status": "done",
         "provider": "xai",
         "model": "grok-imagine-video-1.5",
+        "direction": {
+          "playback_speed": "realtime",
+          "camera": {
+            "kind": "handheld_push_in",
+            "speed": "normal",
+            "path": "从林晚胸前近景跟随她抬头并推到面部特写",
+            "purpose": "让质问从压抑起势到正面爆发，再落回等待答案的脆弱状态"
+          },
+          "action_arc": [
+            { "phase": "setup", "duration_s": 1.2, "action": "正常实时速度，林晚低头深吸气，手指攥紧湿透的袖口" },
+            { "phase": "development", "duration_s": 2.3, "action": "她抬头逼近一步，松开袖口指向沈策，语气和动作连续增强" },
+            { "phase": "peak", "duration_s": 1.0, "action": "她在最重的质问处停步，手臂落下，一滴泪随急促转头甩开" },
+            { "phase": "resolve", "duration_s": 0.5, "action": "她重新直视沈策，呼吸逐渐稳定，等待回答" }
+          ]
+        },
+        "acceptance": {
+          "status": "passed",
+          "checker": "ffmpeg_freezedetect",
+          "checked_at": "2026-08-04T11:19:00+08:00",
+          "policy": {
+            "checker": "ffmpeg_freezedetect",
+            "duration_tolerance_s": 0.04,
+            "freeze_noise_db": -35.0,
+            "freeze_min_duration_s": 0.5,
+            "max_freeze_segment_s": 1.0
+          },
+          "observed": {
+            "delivered_duration_s": 5.0,
+            "required_duration_s": 5.0,
+            "max_freeze_segment_s": 0.625,
+            "freeze_segments": [
+              { "start_s": 4.0, "end_s": 4.625, "duration_s": 0.625 }
+            ]
+          },
+          "reasons": []
+        },
         "request": {
           "duration": 5,
           "resolution": "1080p",
-          "prompt": "情绪特写，嘴唇轻颤，一滴水沿脸颊滑落"
+          "allow_slow_motion": false,
+          "prompt": "正常实时速度。0–1.2秒林晚低头深吸气并攥紧袖口；1.2–3.5秒她抬头逼近一步，松手指向沈策；3.5–4.5秒她停步质问、手臂落下并急促转头；4.5–5秒她重新直视等待回答。摄影机跟随抬头正常推到特写。"
         },
         "request_id": "d97415a1-5796-b7ec-379f-4e6819e08fdf",
         "source_url": "https://vidgen.x.ai/expired-temporary-url/video.mp4",

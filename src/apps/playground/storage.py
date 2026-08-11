@@ -6,14 +6,15 @@ import threading
 from typing import List, Optional
 
 from .models import PlaygroundGeneration, PlaygroundTemplate
+from ...output_contract import OUTPUT
 from ...utils import get_logger
 
 logger = get_logger(__name__)
 
 
 class PlaygroundStorage:
-    HISTORY_PATH = "output/playground_history.json"
-    TEMPLATES_PATH = "output/playground_templates.json"
+    HISTORY_PATH = str(OUTPUT.state / "playground_history.json")
+    TEMPLATES_PATH = str(OUTPUT.state / "playground_templates.json")
 
     def __init__(self):
         self._history: List[PlaygroundGeneration] = []

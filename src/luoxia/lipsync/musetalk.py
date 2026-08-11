@@ -14,6 +14,8 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from src.output_contract import OUTPUT
+
 
 class MuseTalkEngine:
     def __init__(
@@ -24,11 +26,10 @@ class MuseTalkEngine:
         batch_size: int = 4,
         timeout_s: float = 900.0,
     ) -> None:
-        repo_root = Path(__file__).resolve().parents[3]
         self.runtime_root = Path(
             runtime_root
             or os.getenv("MUSETALK_RUNTIME_DIR")
-            or repo_root / "output" / "runtime" / "musetalk"
+            or OUTPUT.runtime / "musetalk"
         )
         default_python = (
             self.runtime_root / ".venv" / "Scripts" / "python.exe"

@@ -14,9 +14,10 @@ load_env_once()
 
 from src.luoxia.media.ffprobe import measure_media_duration_s  # noqa: E402
 from src.models.grok import GrokVideoModel  # noqa: E402
+from src.output_contract import OUTPUT  # noqa: E402
 
 
-ROOT = Path("output/doupo_moyan_30s")
+ROOT = OUTPUT.sample_dir("doupo_moyan_30s")
 VISUAL_MANIFEST = ROOT / "visual_manifest.json"
 VIDEO_DIR = ROOT / "video"
 VIDEO_MANIFEST = ROOT / "video_manifest.json"

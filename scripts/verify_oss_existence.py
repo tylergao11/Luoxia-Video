@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, os.getcwd())
 
 from src.utils.oss_utils import OSSImageUploader
+from src.output_contract import OUTPUT
 
 load_dotenv()
 
@@ -18,7 +19,7 @@ if not uploader.is_configured:
 
 print(f"Checking OSS for objects in projects.json...")
 
-with open("output/projects.json", "r") as f:
+with open(OUTPUT.state / "projects.json", "r") as f:
     projects = json.load(f)
 
 count = 0

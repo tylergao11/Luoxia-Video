@@ -11,9 +11,10 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.utils.system_check import get_ffmpeg_path
+from src.output_contract import OUTPUT
 
 
-ROOT = Path("output/doupo_moyan_30s").resolve()
+ROOT = OUTPUT.sample_dir("doupo_moyan_30s")
 FINAL = ROOT / "final_30s.mp4"
 ASS_PATH = ROOT / "subtitles.ass"
 SCENE_MANIFEST = ROOT / "scene_manifest.json"
@@ -196,7 +197,7 @@ def main() -> None:
             {"id": shot_id, "duration_s": duration_s, "path": video_by_id[shot_id]["video_path"]}
             for shot_id, duration_s in zip(SHOT_IDS, SHOT_DURATIONS)
         ]
-        + [{"id": "s06_aftermath", "duration_s": 1.0, "path": "output/doupo_moyan_30s/stills/s06_aftermath.jpg"}],
+        + [{"id": "s06_aftermath", "duration_s": 1.0, "path": str(ROOT / "stills" / "s06_aftermath.jpg")}],
         "audio": audio_timeline,
         "subtitles": ASS_PATH.as_posix(),
         "final": FINAL.as_posix(),
