@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import copy
+import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from src.luoxia.render.acceptance import VideoAcceptanceError, require_timeline_shot
 from src.luoxia.render.duration import require_request_duration
@@ -23,25 +28,77 @@ def render_timeline_videos(
     output_root: Path | str,
     timeline_path: Optional[Path | str] = None,
 ) -> Dict[str, Any]:
-    """Idempotent video render driven solely by timeline.json."""
+    """Render independent shots concurrently and persist each completed result."""
     assert_writable_for_render(timeline)
     validate_timeline(timeline)
     timeline["phase"] = "rendering"
     root = Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
 
-    for shot in timeline["shots"]:
+    baseline = copy.deepcopy(timeline)
+    baseline_cost = float((baseline.get("cost") or {}).get("actual_usd") or 0.0)
+    configured = int(os.getenv("LUOXIA_VIDEO_RENDER_CONCURRENCY") or len(timeline["shots"]))
+    workers = max(1, min(configured, len(timeline["shots"])))
+    submit_rps = float(os.getenv("LUOXIA_VIDEO_SUBMIT_RPS") or 2.0)
+    if submit_rps <= 0:
+        raise ValueError("LUOXIA_VIDEO_SUBMIT_RPS must be positive")
+    submit_interval = 1.0 / submit_rps
+    submit_lock = threading.Lock()
+    next_submit_at = 0.0
+
+    def wait_for_submit_slot() -> None:
+        nonlocal next_submit_at
+        with submit_lock:
+            now = time.monotonic()
+            scheduled = max(now, next_submit_at)
+            next_submit_at = scheduled + submit_interval
+        delay = scheduled - now
+        if delay > 0:
+            time.sleep(delay)
+
+    def render_one(index: int):
+        local = copy.deepcopy(baseline)
+        shot = local["shots"][index]
+        error = None
         try:
-            _render_one(timeline, shot, root)
+            _render_one(local, shot, root, before_submit=wait_for_submit_slot)
+        except Exception as exc:
+            error = exc
+        local_cost = float((local.get("cost") or {}).get("actual_usd") or 0.0)
+        return index, shot["video"], max(0.0, local_cost - baseline_cost), error
+
+    failures = []
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(render_one, index) for index in range(len(timeline["shots"]))]
+        for future in as_completed(futures):
+            index, video, added_cost, error = future.result()
+            timeline["shots"][index]["video"] = video
+            if added_cost:
+                cost = timeline.setdefault("cost", {})
+                cost["actual_usd"] = round(
+                    float(cost.get("actual_usd") or 0.0) + added_cost,
+                    6,
+                )
             assert_timeline_hash(timeline)
-        finally:
             if timeline_path:
                 save_timeline(timeline_path, timeline)
+            if error is not None:
+                failures.append((timeline["shots"][index]["shot_id"], error))
+
+    if failures:
+        detail = "; ".join(f"{shot_id}: {error}" for shot_id, error in failures)
+        raise RuntimeError(f"video render failed: {detail}")
 
     return timeline
 
 
-def _render_one(timeline: Dict[str, Any], shot: Dict[str, Any], root: Path) -> None:
+def _render_one(
+    timeline: Dict[str, Any],
+    shot: Dict[str, Any],
+    root: Path,
+    *,
+    before_submit: Optional[Callable[[], None]] = None,
+) -> None:
     video = shot.setdefault("video", {})
     shot_id = shot["shot_id"]
     request = video.get("request") or {}
@@ -141,6 +198,8 @@ def _render_one(timeline: Dict[str, Any], shot: Dict[str, Any], root: Path) -> N
             else str(Path(image_path).resolve())
         )
 
+        if not request_id and before_submit is not None:
+            before_submit()
         path, _elapsed = adapter.generate(
             prompt,
             str(out),

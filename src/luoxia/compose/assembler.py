@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from src.luoxia.compose.subtitles import (
     build_cues,
     resolve_position,
+    resolve_shot_style,
     resolve_style,
     shot_subtitle_window,
     style_for_frame,
@@ -36,7 +37,12 @@ def assemble_episode(
     validate_timeline(timeline)
     for shot in timeline["shots"]:
         video = shot.get("video") or {}
-        if video.get("has_audio_track") and not video.get("audio_stripped"):
+        audio_mode = str((video.get("request") or {}).get("audio_mode") or "strip")
+        if (
+            video.get("has_audio_track")
+            and not video.get("audio_stripped")
+            and audio_mode != "native_required"
+        ):
             raise RuntimeError(
                 f"{shot.get('shot_id')}: refuse compose with unstripped provider audio"
             )
@@ -68,10 +74,21 @@ def assemble_episode(
         _build_segment(ffmpeg, plan, work, style=style, frame=frame, fps=fps) for plan in plans
     ]
 
+    soundtrack = timeline.get("soundtrack")
+    joined = work / "episode_without_music.mp4" if soundtrack else out
     if needs_filter_graph(plans):
-        _join_with_transitions(ffmpeg, segments, plans, out=out, fps=fps)
+        _join_with_transitions(ffmpeg, segments, plans, out=joined, fps=fps)
     else:
-        _concat_copy(ffmpeg, segments, work=work, out=out)
+        _concat_copy(ffmpeg, segments, work=work, out=joined)
+
+    if soundtrack:
+        _mix_soundtrack(
+            ffmpeg,
+            joined,
+            soundtrack,
+            duration_s=total_duration_s(plans),
+            out=out,
+        )
 
     timeline["phase"] = "rendered"
     validate_timeline(timeline)
@@ -211,10 +228,29 @@ def _build_segment(
             f"{shot_id}: shot has a line but no audio file at {audio_path!r}; "
             "refusing to compose it as silence"
         )
+    request = video.get("request") or {}
+    native_audio = bool(video.get("has_audio_track")) and not bool(
+        video.get("audio_stripped")
+    ) and str(request.get("audio_mode") or "strip") == "native_required"
+
     if has_audio_file:
         cmd += ["-i", str(audio_path)]
         delay_ms = int(round(float(timing.get("lead_in_s") or 0) * 1000))
-        audio_chain = f"[1:a]adelay={delay_ms}|{delay_ms},apad,atrim=0:{_fmt(target)}[a]"
+        voice_chain = f"[1:a]adelay={delay_ms}|{delay_ms},apad,atrim=0:{_fmt(target)}[voice]"
+        if native_audio:
+            ambient_gain = max(0.0, min(1.0, float(request.get("native_audio_gain") or 0.55)))
+            audio_chain = (
+                f"[0:a]volume={_fmt(ambient_gain)},apad,atrim=0:{_fmt(target)}[ambient];"
+                f"{voice_chain};[ambient][voice]amix=inputs=2:duration=longest:"
+                f"dropout_transition=0:normalize=0,atrim=0:{_fmt(target)}[a]"
+            )
+        else:
+            audio_chain = f"{voice_chain};[voice]anull[a]"
+    elif native_audio:
+        ambient_gain = max(0.0, min(1.0, float(request.get("native_audio_gain") or 0.65)))
+        audio_chain = (
+            f"[0:a]volume={_fmt(ambient_gain)},apad,atrim=0:{_fmt(target)}[a]"
+        )
     else:
         cmd += ["-f", "lavfi", "-t", _fmt(target), "-i", "anullsrc=r=44100:cl=stereo"]
         audio_chain = f"[1:a]atrim=0:{_fmt(target)}[a]"
@@ -291,7 +327,7 @@ def _write_shot_ass(
         return None
 
     width, height = frame
-    frame_style = style_for_frame(style, width, height)
+    frame_style = style_for_frame(resolve_shot_style(shot, style), width, height)
     start, end = window
     cues = build_cues(
         (shot.get("subtitle") or {}).get("text") or "",
@@ -313,3 +349,72 @@ def _write_shot_ass(
 
 def _fmt(value: float) -> str:
     return f"{float(value):.6f}".rstrip("0").rstrip(".") or "0"
+
+
+def _mix_soundtrack(
+    ffmpeg: str,
+    base: Path,
+    soundtrack: Dict[str, Any],
+    *,
+    duration_s: float,
+    out: Path,
+) -> None:
+    """Loop one credited episode score beneath the already-authoritative shot mix."""
+    if soundtrack.get("status") != "ready":
+        raise RuntimeError(
+            f"soundtrack is declared but not ready: {soundtrack.get('status')!r}"
+        )
+    music = Path(str(soundtrack.get("local_path") or ""))
+    if not music.is_file():
+        raise FileNotFoundError(f"soundtrack file missing: {music}")
+
+    gain = max(0.0, min(1.0, float(soundtrack.get("gain") or 0.14)))
+    fade_in = min(float(soundtrack.get("fade_in_s") or 0), duration_s)
+    fade_out = min(float(soundtrack.get("fade_out_s") or 0), duration_s)
+    fade_out_start = max(0.0, duration_s - fade_out)
+    music_chain = [
+        f"atrim=0:{_fmt(duration_s)}",
+        "asetpts=PTS-STARTPTS",
+        f"volume={_fmt(gain)}",
+    ]
+    if fade_in > 0:
+        music_chain.append(f"afade=t=in:st=0:d={_fmt(fade_in)}")
+    if fade_out > 0:
+        music_chain.append(
+            f"afade=t=out:st={_fmt(fade_out_start)}:d={_fmt(fade_out)}"
+        )
+
+    filters = (
+        f"[1:a]{','.join(music_chain)}[music];"
+        "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+    )
+    result = subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-i",
+            str(base),
+            "-stream_loop",
+            "-1",
+            "-i",
+            str(music),
+            "-filter_complex",
+            filters,
+            "-map",
+            "0:v",
+            "-map",
+            "[aout]",
+            "-t",
+            _fmt(duration_s),
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            str(out),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=900,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"soundtrack mix failed: {result.stderr[-500:]}")

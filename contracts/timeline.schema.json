@@ -90,6 +90,7 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/shot" }
     },
+    "soundtrack": { "$ref": "#/$defs/soundtrack" },
     "cost": {
       "type": "object",
       "additionalProperties": false,
@@ -502,11 +503,47 @@
         "start_s": { "type": ["number", "null"], "minimum": 0 },
         "end_s": { "type": ["number", "null"], "minimum": 0 },
         "description": { "type": ["string", "null"] },
+        "style": { "$ref": "#/$defs/subtitle_style_override" },
         "position": {
           "type": ["string", "null"],
           "enum": ["bottom", "middle", "top", null],
           "description": "仅在本镜需要偏离全局位置时填写（画面下三分之一有关键信息或已有画面内文字）。null=继承 global.subtitle_style.position。字幕位置是全局一致性问题，不要逐镜换位置。"
         }
+      }
+    },
+    "subtitle_style_override": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional shot-local typography for title cards or other deliberate exceptions.",
+      "properties": {
+        "font_name": { "type": "string" },
+        "font_size_px": { "type": "number", "minimum": 8, "maximum": 400 },
+        "bold": { "type": "boolean" },
+        "primary_color_hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "outline_color_hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "outline_px": { "type": "number", "minimum": 0, "maximum": 8 },
+        "shadow_px": { "type": "number", "minimum": 0, "maximum": 8 },
+        "margin_v_px": { "type": "number", "minimum": 0 },
+        "margin_h_px": { "type": "number", "minimum": 0 },
+        "max_chars_per_line": { "type": "integer", "minimum": 1, "maximum": 60 },
+        "max_lines_per_cue": { "type": "integer", "minimum": 1, "maximum": 4 }
+      }
+    },
+    "soundtrack": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": false,
+      "description": "Episode-level music mixed only after shot audio and ambience are assembled.",
+      "properties": {
+        "status": { "type": "string", "enum": ["pending", "ready", "failed"] },
+        "local_path": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "creator": { "type": ["string", "null"] },
+        "source_url": { "type": ["string", "null"] },
+        "license": { "type": ["string", "null"] },
+        "gain": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.14 },
+        "fade_in_s": { "type": "number", "minimum": 0, "maximum": 10, "default": 1.2 },
+        "fade_out_s": { "type": "number", "minimum": 0, "maximum": 10, "default": 2.0 }
       }
     },
     "subtitle_style": {

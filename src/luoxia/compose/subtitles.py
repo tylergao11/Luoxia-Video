@@ -91,6 +91,13 @@ def resolve_position(shot: Dict[str, Any], style: Dict[str, Any]) -> str:
     return override or str(style.get("position") or "bottom")
 
 
+def resolve_shot_style(shot: Dict[str, Any], style: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply a deliberate shot-local typography exception, normally a title card."""
+    resolved = dict(style)
+    resolved.update((shot.get("subtitle") or {}).get("style") or {})
+    return resolved
+
+
 def _ass_color(hex_color: str) -> str:
     value = str(hex_color).lstrip("#")
     if len(value) != 6:
