@@ -175,6 +175,7 @@ class AudioGenerator:
                 output_path=output_path,
                 voice=voice_id,
                 speech_rate=speed,
+                pitch_rate=pitch,
                 instructions=instructions,
             )
             return
@@ -322,6 +323,7 @@ class AudioGenerator:
                     output_path=output_path,
                     voice=voice,
                     speech_rate=speed,
+                    pitch_rate=pitch,
                     instructions=instructions,
                 )
             elif self.is_qwen3_voice(voice):

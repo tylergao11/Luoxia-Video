@@ -40,7 +40,7 @@ _TAIL_ROOM_S = 0.04
 
 # Curated from the current official Seed-TTS 2.0 catalog.  Keep this intentionally
 # small: it is the product casting list, not a stale copy of every vendor voice.
-VOICES: Dict[str, Dict[str, str]] = {
+VOICES: Dict[str, Dict[str, Any]] = {
     "zh_male_qingcang_uranus_bigtts": {
         "name": "擎苍 2.0",
         "gender": "male",
@@ -52,6 +52,18 @@ VOICES: Dict[str, Dict[str, str]] = {
         "gender": "male",
         "scene": "通用场景",
         "provenance": "番茄小说/豆包/剪映同款",
+    },
+    "zh_male_baqiqingshu_uranus_bigtts": {
+        "name": "霸气青叔 2.0",
+        "gender": "male",
+        "scene": "有声阅读",
+        "provenance": "番茄小说/豆包/剪映同款",
+    },
+    "zh_male_gaolengchenwen_uranus_bigtts": {
+        "name": "高冷沉稳 2.0",
+        "gender": "male",
+        "scene": "通用场景",
+        "provenance": "Seed-TTS 2.0",
     },
     "saturn_zh_male_bujiqingnian_tob": {
         "name": "不羁青年 2.0",
@@ -95,6 +107,18 @@ VOICES: Dict[str, Dict[str, str]] = {
         "scene": "通用场景",
         "provenance": "番茄小说/豆包/剪映同款",
     },
+    "zh_female_tianmeiyueyue_uranus_bigtts": {
+        "name": "甜美悦悦 2.0",
+        "gender": "female",
+        "scene": "通用场景",
+        "provenance": "豆包同款",
+    },
+    "zh_female_mengyatou_uranus_bigtts": {
+        "name": "萌丫头 2.0",
+        "gender": "female",
+        "scene": "通用场景",
+        "provenance": "Seed-TTS 2.0",
+    },
     "zh_female_gaolengyujie_uranus_bigtts": {
         "name": "高冷御姐 2.0",
         "gender": "female",
@@ -123,8 +147,10 @@ VOICES: Dict[str, Dict[str, str]] = {
 
 _PREFERRED_BY_GENDER = {
     "male": (
-        "zh_male_qingcang_uranus_bigtts",
         "zh_male_ruyaqingnian_uranus_bigtts",
+        "zh_male_gaolengchenwen_uranus_bigtts",
+        "zh_male_baqiqingshu_uranus_bigtts",
+        "zh_male_qingcang_uranus_bigtts",
         "saturn_zh_male_bujiqingnian_tob",
         "saturn_zh_male_fengfashaonian_tob",
         "saturn_zh_male_aomanshaoye_tob",
@@ -133,7 +159,9 @@ _PREFERRED_BY_GENDER = {
         "zh_male_dayi_uranus_bigtts",
     ),
     "female": (
+        "zh_female_tianmeiyueyue_uranus_bigtts",
         "zh_female_wenroushunv_uranus_bigtts",
+        "zh_female_mengyatou_uranus_bigtts",
         "zh_female_gaolengyujie_uranus_bigtts",
         "zh_female_meilinvyou_uranus_bigtts",
         "zh_female_zhishuaiyingzi_uranus_bigtts",
@@ -248,6 +276,13 @@ class DoubaoTTS:
         return max(-50, min(100, round((speed - 1.0) * 100)))
 
     @staticmethod
+    def _provider_pitch(pitch_rate: float) -> int:
+        rate = float(pitch_rate)
+        if not 0.5 <= rate <= 2.0:
+            raise ValueError("pitch_rate must be in [0.5, 2.0]")
+        return max(-12, min(12, round(12 * math.log2(rate))))
+
+    @staticmethod
     def _performance_plan(
         text: str,
         performance: Optional[Dict[str, Any]],
@@ -343,6 +378,7 @@ class DoubaoTTS:
         text: str,
         voice_id: str,
         provider_rate: int,
+        provider_pitch: int,
         parts: List[Dict[str, Any]],
         take_id: Optional[str],
     ) -> str:
@@ -360,8 +396,8 @@ class DoubaoTTS:
             separators=(",", ":"),
         )
         payload = (
-            f"{SPEECH_RENDER_CONTRACT}:doubao-v4\0{_RESOURCE_ID}\0{text}\0{voice_id}\0"
-            f"{provider_rate}\0{compiled}\0{take_id or ''}"
+            f"{SPEECH_RENDER_CONTRACT}:doubao-v5\0{_RESOURCE_ID}\0{text}\0{voice_id}\0"
+            f"{provider_rate}\0{provider_pitch}\0{compiled}\0{take_id or ''}"
         ).encode("utf-8")
         return "sha256:" + hashlib.sha256(payload).hexdigest()
 
@@ -424,6 +460,7 @@ class DoubaoTTS:
         output_path: str,
         voice: Optional[str] = None,
         speech_rate: float = 1.0,
+        pitch_rate: float = 1.0,
         instructions: Optional[str] = None,
         performance: Optional[Dict[str, Any]] = None,
         take_id: Optional[str] = None,
@@ -437,8 +474,11 @@ class DoubaoTTS:
             raise ValueError("refusing to synthesize an empty line")
         voice_id, _meta = self._resolve_voice(voice)
         provider_rate = self._provider_rate(speech_rate)
+        provider_pitch = self._provider_pitch(pitch_rate)
         parts = self._compile_request_parts(line, instructions, performance)
-        digest = self.content_sha256(line, voice_id, provider_rate, parts, take_id)
+        digest = self.content_sha256(
+            line, voice_id, provider_rate, provider_pitch, parts, take_id
+        )
 
         out = Path(output_path)
         if out.suffix.lower() != ".wav":
@@ -468,6 +508,7 @@ class DoubaoTTS:
                     text=part["text"],
                     voice_id=voice_id,
                     provider_rate=provider_rate,
+                    provider_pitch=provider_pitch,
                     context=part.get("context"),
                     audio_format="pcm",
                 )
@@ -557,10 +598,11 @@ class DoubaoTTS:
                 timing_path.unlink(missing_ok=True)
             digest_path.write_text(digest + "\n", encoding="utf-8", newline="\n")
             logger.info(
-                "doubao tts %s voice=%s speed=%d parts=%d usage=%s logids=%s -> %.3fs",
+                "doubao tts %s voice=%s speed=%d pitch=%d parts=%d usage=%s logids=%s -> %.3fs",
                 out.name,
                 voice_id,
                 provider_rate,
+                provider_pitch,
                 len(parts),
                 usages or "-",
                 log_ids or "-",
@@ -578,6 +620,7 @@ class DoubaoTTS:
         text: str,
         voice_id: str,
         provider_rate: int,
+        provider_pitch: int,
         context: Optional[str],
         audio_format: str = "pcm",
     ) -> Tuple[bytes, List[Dict[str, Any]], Optional[Dict[str, Any]], Optional[str]]:
@@ -592,6 +635,8 @@ class DoubaoTTS:
             "Content-Type": "application/json",
         }
         additions: Dict[str, Any] = {"disable_markdown_filter": True}
+        if provider_pitch:
+            additions["post_process"] = {"pitch": provider_pitch}
         if context:
             # The API currently accepts a list but only reads its first item.
             additions["context_texts"] = [context]
