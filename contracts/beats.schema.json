@@ -96,6 +96,10 @@
           "character_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
           "display_name": { "type": "string" },
           "voice_id": { "type": ["string", "null"] },
+          "tts_provider": { "type": ["string", "null"] },
+          "speech_rate": { "type": "number", "minimum": 0.5, "maximum": 2.0, "default": 1.0 },
+          "pitch_rate": { "type": "number", "minimum": 0.5, "maximum": 2.0, "default": 1.0 },
+          "voice_instructions": { "type": ["string", "null"] },
           "role": {
             "type": ["string", "null"],
             "enum": ["protagonist", "antagonist", "support", "narrator", null]

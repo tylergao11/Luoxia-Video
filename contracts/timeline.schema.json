@@ -80,6 +80,8 @@
           "display_name": { "type": "string" },
           "voice_id": { "type": "string" },
           "tts_provider": { "type": "string", "default": "xai" },
+          "speech_rate": { "type": "number", "minimum": 0.5, "maximum": 2.0, "default": 1.0 },
+          "pitch_rate": { "type": "number", "minimum": 0.5, "maximum": 2.0, "default": 1.0 },
           "reference_image_asset_id": { "type": ["string", "null"] },
           "voice_instructions": { "type": ["string", "null"], "description": "情绪/风格指令，若 TTS 供应商支持。" }
         }
@@ -222,6 +224,10 @@
         "speed": {
           "type": "number", "minimum": 0.5, "maximum": 2.0, "default": 1.0,
           "description": "实际应用的语速倍率。solver 只允许在 global.min/max_speed_ratio 区间内调整。"
+        },
+        "pitch_rate": {
+          "type": "number", "minimum": 0.5, "maximum": 2.0, "default": 1.0,
+          "description": "实际应用的音调倍率，来自角色 cast；时长 solver 不改写它。"
         },
         "measured_duration_s": {
           "type": ["number", "null"], "minimum": 0,

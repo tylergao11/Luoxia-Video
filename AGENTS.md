@@ -66,6 +66,17 @@ If both Claude and Codex guidance exist, preserve behavior parity unless the use
 
 **Luoxia-Video** (落霞) is a novel-to-short-drama product. The short-drama spine is Luoxia contracts: **beats** own keep/drop content selection; **timeline** is the sole audio-first duration authority. The Next.js + FastAPI app is the human shell (script → beats review → cast/assets → storyboard → assembly). Do not brand this product as LumenX; upstream `alibaba/lumenx` is provenance only.
 
+## Short-Drama Generation Guardrails
+
+- 用户提供的成品提示词是该次生成的导演真相源。除替换已明确参数化的台词、首帧路径和实测音频时长外，不得擅自改写、扩写或加入 `slow`、`very slow`、`slow push-in`、`locked camera`、`subtle motion` 等导演指令。
+- 有对白镜头必须先生成完整音频并实测时长；视频请求时长以实测音频为下限，合成必须保留完整话音和 timeline 的 `tail_out_s`，禁止在最后一个字、尾音或自然收口前硬切。
+- 无对白 Grok 镜头若用户未指定时长，应让供应商使用默认成片节奏，返回后再记录实测时长；不得拍脑门填秒数，也不得为凑整集时长增加空镜、慢动作、重复反应或无意义首尾镜。
+- 每个镜头必须新增叙事信息或完成一个必要动作，动作完成即切。纯观看、停留、握爪或空镜若不推进剧情，不得独立占用镜头。
+- 说话者必须看向真实对话对象；自语角色看向场景内合理目标，不默认看镜头。首帧要同时保证视线轴成立和说话者口部可见。
+- 人物动作必须符合当下动机。被嫌弃的小狐应留在原地或退缩，不能主动跟随；禁止为了画面动起来而添加与剧情相反的跳跃、行走或触碰。
+- Grok 批量生成允许并行等待，但提交必须经过统一节流器，默认相邻请求至少间隔 2.1 秒；禁止同秒并发提交后再靠返工处理 429。
+- 音色、`speech_rate`、`pitch_rate` 和 `voice_instructions` 属于 cast/audio 真相源，不得散落在临时生成脚本里，也不得把某一部剧的角色参数写成全局默认。
+
 ## Architecture
 
 ### Frontend

@@ -130,18 +130,23 @@ def make_tts_synthesize(
         provider = provider_for_voice(voice, declared_provider)
         audio["provider"] = provider
         engine = resolve_engine(provider)
+        pitch_rate = float(audio.get("pitch_rate") or cast_entry.get("pitch_rate") or 1.0)
+        audio["pitch_rate"] = pitch_rate
 
         out = Path(episode_dir) / "audio" / f"{shot['shot_id']}.wav"
         out.parent.mkdir(parents=True, exist_ok=True)
-        path, measured, digest = engine.synthesize_measured(
+        synthesize_kwargs = dict(
             text=text,
             output_path=str(out),
             voice=voice,
             speech_rate=speed,
-            instructions=dialogue.get("emotion"),
+            instructions=dialogue.get("emotion") or cast_entry.get("voice_instructions"),
             performance=dialogue.get("performance"),
             take_id=audio.get("take_id"),
         )
+        if provider == "doubao":
+            synthesize_kwargs["pitch_rate"] = pitch_rate
+        path, measured, digest = engine.synthesize_measured(**synthesize_kwargs)
         return measured, path, digest
 
     return synthesize

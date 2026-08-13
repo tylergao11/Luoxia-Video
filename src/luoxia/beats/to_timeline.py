@@ -167,7 +167,10 @@ def _timeline_cast_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
         "display_name": entry.get("display_name") or entry["character_id"],
         "voice_id": voice_id,
         "tts_provider": provider_for_voice(voice_id, entry.get("tts_provider")),
+        "speech_rate": float(entry.get("speech_rate") or 1.0),
+        "pitch_rate": float(entry.get("pitch_rate") or 1.0),
         "reference_image_asset_id": entry.get("reference_image_path"),
+        "voice_instructions": entry.get("voice_instructions"),
     }
 
 
@@ -323,7 +326,8 @@ def _dialogue_shot(
                 cast_entry.get("voice_id"), cast_entry.get("tts_provider")
             ),
             "voice_id": cast_entry.get("voice_id"),
-            "speed": 1.0,
+            "speed": float(cast_entry.get("speech_rate") or 1.0),
+            "pitch_rate": float(cast_entry.get("pitch_rate") or 1.0),
         },
         "timing": {"trim": {"strategy": "tail", "head_s": 0.0, "tail_s": 0.0}},
         "still": {

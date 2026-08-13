@@ -39,10 +39,19 @@ def render_timeline_videos(
     baseline_cost = float((baseline.get("cost") or {}).get("actual_usd") or 0.0)
     configured = int(os.getenv("LUOXIA_VIDEO_RENDER_CONCURRENCY") or len(timeline["shots"]))
     workers = max(1, min(configured, len(timeline["shots"])))
-    submit_rps = float(os.getenv("LUOXIA_VIDEO_SUBMIT_RPS") or 2.0)
-    if submit_rps <= 0:
-        raise ValueError("LUOXIA_VIDEO_SUBMIT_RPS must be positive")
-    submit_interval = 1.0 / submit_rps
+    configured_interval = os.getenv("LUOXIA_VIDEO_SUBMIT_INTERVAL_S")
+    legacy_rps = os.getenv("LUOXIA_VIDEO_SUBMIT_RPS")
+    if configured_interval is not None:
+        submit_interval = float(configured_interval)
+    elif legacy_rps is not None:
+        submit_rps = float(legacy_rps)
+        if submit_rps <= 0:
+            raise ValueError("LUOXIA_VIDEO_SUBMIT_RPS must be positive")
+        submit_interval = 1.0 / submit_rps
+    else:
+        submit_interval = 2.1
+    if submit_interval < 0:
+        raise ValueError("LUOXIA_VIDEO_SUBMIT_INTERVAL_S must be non-negative")
     submit_lock = threading.Lock()
     next_submit_at = 0.0
 

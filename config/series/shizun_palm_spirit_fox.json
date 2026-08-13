@@ -1,0 +1,43 @@
+{
+  "schema_version": "luoxia.series-cast.v1",
+  "series_id": "shizun_palm_spirit_fox",
+  "title": "师尊的掌心小灵狐",
+  "tts_provider": "doubao",
+  "video": {
+    "provider": "xai",
+    "model": "grok-imagine-video-1.5",
+    "submit_interval_s": 2.1
+  },
+  "cast": [
+    {
+      "character_id": "linghu",
+      "display_name": "陈小域／小灵狐",
+      "voice_id": "zh_female_tianmeiyueyue_uranus_bigtts",
+      "tts_provider": "doubao",
+      "speech_rate": 0.93,
+      "pitch_rate": 1.1224620483,
+      "pitch_semitones": 2,
+      "voice_instructions": "软萌奶甜的少女，有一点懵和委屈，自然气声，不夸张。小狐说话时需要自然狐嘴口型。"
+    },
+    {
+      "character_id": "disciple",
+      "display_name": "青衣弟子",
+      "voice_id": "zh_male_shaonianzixin_uranus_bigtts",
+      "tts_provider": "doubao",
+      "speech_rate": 1.0,
+      "pitch_rate": 1.0,
+      "pitch_semitones": 0,
+      "voice_instructions": "普通清亮青年声，略带嫌弃，语气自然克制，不凶狠。"
+    },
+    {
+      "character_id": "shizun",
+      "display_name": "仙尊",
+      "voice_id": "zh_male_ruyaqingnian_uranus_bigtts",
+      "tts_provider": "doubao",
+      "speech_rate": 0.9,
+      "pitch_rate": 0.9438743127,
+      "pitch_semitones": -1,
+      "voice_instructions": "清冷低沉、寡言克制，对小狐温柔包容，语气很轻，不拖沓。"
+    }
+  ]
+}
