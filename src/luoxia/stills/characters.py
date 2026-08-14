@@ -8,24 +8,24 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 GenerateFn = Callable[..., str]
 
 # Bump when the sheet prompt changes so cached portraits regenerate instead of going stale.
-SHEET_PROMPT_VERSION = "4"
+SHEET_PROMPT_VERSION = "5"
 
 # Product default: 红果 AI 漫 near-parity target. See docs/luoxia/07-STYLE-REF.md.
-# Sharp adult 精致3D漫剧 (narrow eyes, bone structure, material density, drama light)
-# — NOT photo-real, NOT 2D cel, NOT soft Q-cute round face.
+# Character age, gender, facial structure and costume come from cast/identity truth.
+# The global lock owns only the rendering language, never a fixed face archetype.
 HONGGUO_STYLE_LOCK = (
-    "中国AI漫剧/红果短剧同款精致3D CGI角色渲染，虚幻引擎级材质密度，"
-    "锋利骨相与修长脸型，窄长眼型与冷冽高光，瓷光无毛孔皮肤，"
+    "中国AI漫剧/红果短剧同款国风精致3D CGI角色渲染，虚幻引擎级材质密度，"
+    "角色年龄感、性别气质、脸型与五官必须服从角色设定和身份参考，瓷光非写实皮肤，"
     "发丝丝缕清晰、布料纤维与磨损高细节，戏剧体积光与暗部层次，"
-    "封面级精修压迫感，成年向美型3D动漫角色（非幼态Q版）"
+    "红果封面级精修，正常人物比例，精致美型但非真人写真、非Q版"
 )
 
 SHEET_TEMPLATE = (
     f"{HONGGUO_STYLE_LOCK}。"
-    "角色定妆照，单人半身近景，中性微冷表情，直视镜头，"
+    "角色定妆照，单人半身近景，自然中性表情，直视镜头，"
     "戏剧侧光+柔和环境光，纯深灰背景，服装发型材质清晰；"
-    "脸模锋利度与瓷光完成度必须接近红果封面男主；"
-    "禁止真人写真、毛孔写实、幼态大圆眼、Q版圆脸、2D赛璐璐厚线稿。\n"
+    "脸、年龄感、发型与服装必须忠于角色设定和身份参考；"
+    "禁止真人写真、毛孔写实、Q版夸张大眼与圆头比例、2D赛璐璐厚线稿。\n"
     "角色：{display_name}。{appearance}"
 )
 
@@ -33,9 +33,9 @@ SHEET_NEGATIVE = (
     "photorealistic human, real person, live action, real human photo, "
     "idol photoshoot, documentary skin pores, realistic skin pores, freckles, "
     "oily skin, natural imperfect skin, DSLR photo, phone snapshot, "
-    "chibi, baby face, cute round face, big round moe eyes, soft q-version, "
+    "chibi, oversized moe eyes, exaggerated childlike proportions, soft q-version, "
     "2d anime cel shading, thick outlines, flat color, sketch, "
-    "low poly, plastic toy, silver hair, white hair, red eyes, "
+    "low poly, plastic toy, "
     "多人，背影，侧脸大角度，遮挡面部，动态模糊，文字，水印，复杂背景，拼图，UI"
 )
 

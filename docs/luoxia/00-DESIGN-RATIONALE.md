@@ -95,7 +95,7 @@ def create_video_task(self, script_id, image_url, prompt, duration: int = 5, ...
 
 ### 4.4 TTS 绑死 DashScope
 
-> 本节记录最初审计时的上游状态。Luoxia 1.2 已改为 `src/luoxia/speech.py` 单一语音边界，默认使用本地 Qwen3-TTS VoiceDesign；xAI 与 `src/audio/tts.py` 只保留给显式兼容工作流。
+> 本节记录最初审计时的上游状态。当前 Luoxia 已改为 `src/luoxia/speech.py` 单一语音边界，默认使用豆包 Seed-TTS 2.0；Qwen3-TTS、xAI TTS 与旧 `src/audio/tts.py` 只保留给显式兼容工作流。
 
 最初 `src/audio/tts.py` 的 `TTSProcessor` 走 `dashscope` SDK（CosyVoice 与 Qwen3-TTS 两条路径），读 `DASHSCOPE_API_KEY`，且各入口会自行实例化供应商。
 

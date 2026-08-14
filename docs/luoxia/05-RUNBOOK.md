@@ -6,8 +6,9 @@
 
 | 变量 | 用途 | 是否必须 |
 | --- | --- | --- |
-| 订阅池登录或 `XAI_API_KEY` | Luoxia LLM、图片与 Grok 视频，取决于当前鉴权模式 | 必须二选一 |
-| `output/runtime/qwen3-tts` | 本地 Qwen3-TTS VoiceDesign 配音 | 可选离线替代；默认 xAI TTS 不依赖此目录 |
+| Grok 登录/订阅池或 `XAI_API_KEY` | Luoxia LLM、图片与 Grok 视频，取决于当前鉴权模式 | 必须二选一；默认登录/订阅池 |
+| `VOLCENGINE_TTS_API_KEY` | 默认豆包 Seed-TTS 2.0 配音 | 主链必须 |
+| `output/runtime/qwen3-tts` | 本地 Qwen3-TTS VoiceDesign 配音 | 仅显式选择 Qwen3 兼容路径时需要 |
 | `output/runtime/musetalk` | MuseTalk 1.5 音频驱动口型 | 特写对白镜必需 |
 | `DASHSCOPE_API_KEY` | 仍选择 DashScope 的旧工作流或模型 | Luoxia 主链不需要 |
 
@@ -24,7 +25,7 @@
 
 `lipsync.required=true` 同样是硬合同：缺视频、缺锁定音频、MuseTalk 运行时不完整或推理失败时，管线记录失败镜头后停止，禁止绕过口型继续合成成片。
 
-`.env` 由 `src/luoxia/env.py` 在 CLI / 管线入口加载。本地 Qwen3-TTS 运行时或模型缺失时，TTS 会明确失败；禁止用静音、音调或默认音色冒充成功。
+`.env` 由 `src/luoxia/env.py` 在 CLI / 管线入口加载。默认豆包凭据缺失或合成失败时，TTS 会明确失败；显式选择 Qwen3 兼容路径时，本地运行时或模型缺失也会明确失败。禁止用静音、音调或默认音色冒充成功。
 
 可选 LLM 切换（默认 DashScope）：
 

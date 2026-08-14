@@ -184,7 +184,7 @@ ffmpeg -i in.mp4 -c:v copy -an out.mp4
 
 `reference_audios` 仅限美国地区的受信合作伙伴，且只能选内置 `voice_id`，**无法上传自有音频**。
 
-视频生成接口的音轨不能承担本项目的配音角色，也无法替代“我方 TTS 音频驱动口型”。Luoxia 的默认配音走本地 Qwen3-TTS VoiceDesign，生成视频自带的音轨仍必须剥离；MuseTalk 只消费已经锁定的 Luoxia 音频。这印证了架构分层的必要性。
+视频生成接口的音轨不能承担本项目的配音角色，也无法替代“我方 TTS 音频驱动口型”。Luoxia 的默认配音走豆包 Seed-TTS 2.0，生成视频自带的音轨仍必须剥离；MuseTalk 只消费已经锁定的 Luoxia 音频。这印证了架构分层的必要性。
 
 ## 4. 阶段二：换本地 Wan 需要满足什么
 
@@ -202,6 +202,6 @@ ffmpeg -i in.mp4 -c:v copy -an out.mp4
 
 ## 5. 语音后端
 
-Luoxia 的唯一语音边界是 `src/luoxia/speech.py`，默认供应商为本地 `src/audio/qwen3_tts.py`，`src/audio/xai_tts.py` 仅保留为显式兼容供应商。pipeline、CLI 和桌面 API 必须共用这组适配器，禁止各自形成第二条链路。旧版 `src/audio/tts.py` 只服务仍使用 DashScope 自定义音色的旧工作流。
+Luoxia 的唯一语音边界是 `src/luoxia/speech.py`，默认供应商为 `src/audio/doubao_tts.py`（豆包 Seed-TTS 2.0）；`src/audio/qwen3_tts.py` 与 `src/audio/xai_tts.py` 仅保留为显式兼容供应商。pipeline、CLI 和桌面 API 必须共用这组适配器，禁止各自形成第二条链路。旧版 `src/audio/tts.py` 只服务仍使用 DashScope 自定义音色的旧工作流。
 
-自由文本导演意图先变成 provider-neutral 的字符区间计划，再由 Qwen3 适配器编译为真人表演指令；显式选择 xAI 时才编译局部控制标签。缓存键覆盖最终表演指令。**合成后必须用 ffprobe 探测真实音频时长**写入 `audio.measured_duration_s`，绝对不要用字数估算。
+自由文本导演意图、`speech_rate` 与 `pitch_rate` 先写入 provider-neutral 的 cast/audio 真相源，再由选定适配器编译为供应商参数；默认由豆包适配器执行，只有显式选择时才进入 Qwen3 或 xAI 兼容路径。缓存键必须覆盖最终供应商参数。**合成后必须用 ffprobe 探测真实音频时长**写入 `audio.measured_duration_s`，绝对不要用字数估算。

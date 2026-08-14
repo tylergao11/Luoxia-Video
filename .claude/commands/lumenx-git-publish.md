@@ -53,13 +53,17 @@ git grep -iE "(sk-|AKID|access_key|password|pwd|token|bearer)" -- ':(exclude)*.l
 git ls-files | grep -E "\.env$|secret|credential|\.key$|\.pem$" | grep -v "\.example"
 ```
 
-### 3. 检查 .gitignore 完整性
+### 3. 检查 .gitignore 边界
 
 ```bash
-grep -E "^\.env|^\.agent|^CLAUDE\.md|^output/" .gitignore
+grep -E "^\.env|^\.agent|^CLAUDE\.md" .gitignore
+if grep -qE "^/?output(/|$)" .gitignore; then
+  echo "ERROR: output/ 是跨工作站生产真相，不得忽略"
+  exit 1
+fi
 ```
 
-确保至少包含：`.env`、`.agent/`、`CLAUDE.md`、`output/`
+确保至少忽略：`.env`、`.agent/`、`CLAUDE.md`；同时确保没有任何以 `output/` 为目标的忽略规则。`output/` 必须接受同一套敏感信息扫描并正常提交。
 
 ## 阶段二：代码质量（可选但推荐）
 

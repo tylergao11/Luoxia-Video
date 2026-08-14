@@ -90,28 +90,8 @@ logs/
 
 # Project outputs
 static/output/
-# Local state, media, provider receipts and model artifacts never belong in Git.
-# Keep only the layout docs and deliberately curated sample recipes.
-output/**
-!output/**/
-!output/README.md
-!output/samples/**/README.md
-!output/samples/**/recipes/
-!output/samples/**/recipes/*.py
-# Formal episode truth and reviewable media are product assets, not disposable model output.
-!output/episodes/**/timeline.json
-!output/episodes/**/timeline.frozen.json
-!output/episodes/**/stills/*.png
-!output/episodes/**/stills/*.jpg
-!output/episodes/**/stills/*.webp
-!output/episodes/**/audio/*.wav
-!output/episodes/**/audio/*.mp3
-!output/episodes/**/audio/*.m4a
-!output/episodes/**/video/*.mp4
-!output/episodes/**/final.mp4
-
-# Local model downloads/caches are never project configuration.
-output/runtime/**
+# `output/` is production truth and must remain visible to Git so it can sync
+# between workstations. Do not add ignore rules for `output/` or its children.
 static/
 
 # Internal development tools (not for public repo)

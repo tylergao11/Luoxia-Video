@@ -1,0 +1,17 @@
+{
+  "schema_version": "luoxia.outfit-reference-set.v1",
+  "character_role": "女主角",
+  "truth_source": "user_approved_reference_images",
+  "references": {
+    "home_sleep": {
+      "usage": "睡觉与居家穿着",
+      "path": "output/studio/media/assets/characters/heroine/outfits/home_sleep_outfit_master_v1_green.png",
+      "sha256": "11722a0ce54f0d810af6ff9ff1b9c058c3495933a5ab4218c8ff5c990a3bce23"
+    },
+    "outdoor": {
+      "usage": "外出穿着",
+      "path": "output/studio/media/assets/characters/heroine/outfits/outdoor_outfit_master_v1_green.png",
+      "sha256": "5d18322afef6fec13b5de8cf254a3a8a4c71a337facc2ee9be2d0ff3525d8527"
+    }
+  }
+}

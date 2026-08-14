@@ -27,6 +27,15 @@
 | **Pipeline** | Novel/script → Luoxia beats review → style/cast → storyboard video → assembly |
 | **Playground** | Standalone image/video generation workbench (no project context required) |
 
+### Current Production Defaults
+
+| Stage | Single Default |
+|-------|----------------|
+| **Speech** | Doubao Seed-TTS 2.0; character voice and performance settings are owned by cast/audio truth |
+| **Video** | Grok `grok-imagine-video-1.5`; authenticated by Grok login/subscription pool (`session` + `xai_pool`) by default |
+| **First frame** | Hongguo-style Chinese 3D AI motion-comic, non-photoreal, landscape `16:9`; face and outfit follow the character masters |
+| **Outputs** | `output/` remains visible to Git and is synchronized between workstations as production truth |
+
 ---
 
 ## ✨ Core Capabilities
@@ -41,7 +50,7 @@
 - **Art Direction Control** — Custom visual styles with global consistency
 - **Multi-model Asset Generation** — Character turnarounds, scene establishing shots, prop references
 - **AI Video Generation** — I2V / R2V multi-mode video generation + batch candidates
-- **Smart Dubbing** — CosyVoice / Qwen3-TTS multi-voice dialogue synthesis
+- **Smart Dubbing** — Doubao Seed-TTS 2.0 multi-voice dialogue synthesis
 - **One-click Export** — Timeline editing + FFmpeg merging
 
 </td>
@@ -99,7 +108,8 @@
 | **MuleRun** | GPT-Image-2 | T2I, I2I (up to 4K) |
 | **Kling Direct** | Kling V3 | I2V, R2V |
 | **Vidu Direct** | Vidu Q3 Pro / Turbo | I2V, R2V |
-| **DashScope** | CosyVoice, Qwen3-TTS | TTS Dubbing |
+| **Grok Subscription Pool** | grok-imagine-video-1.5 | Main-pipeline video generation |
+| **Volcengine / Doubao** | Seed-TTS 2.0 | Main-pipeline TTS dubbing |
 | **DashScope** | Qwen 3.7 Plus | Script Analysis, Prompt Polish |
 
 ---
@@ -119,9 +129,10 @@
 git clone https://github.com/alibaba/lumenx.git
 cd lumenx
 
-# Configure API Key
+# Configure the production pipeline
 cp .env.example .env
-# Edit .env, fill in DASHSCOPE_API_KEY (required)
+# Add VOLCENGINE_TTS_API_KEY to .env, then complete Grok login in the app
+# DASHSCOPE_API_KEY is only needed when a DashScope model is explicitly selected
 
 # Start (backend on 17177 + frontend on 3008, auto-opens browser)
 npm run dev
@@ -148,11 +159,12 @@ cd frontend && npm install && npm run dev  # http://localhost:3008
 
 ## ⚙️ Configuration Modes
 
-Luoxia-Video uses a **local-first** architecture. The minimal setup requires only one API key.
+Luoxia-Video uses a **local-first** architecture. The production pipeline uses Grok login/subscription-pool authentication for video and a Doubao API key for speech.
 
 | Mode | Required | Available Capabilities |
 |------|----------|----------------------|
-| **Basic** | `DASHSCOPE_API_KEY` | Wan/Qwen/HappyHorse/PixVerse/Kling(proxy)/Vidu(proxy) + TTS |
+| **Luoxia pipeline** | Grok login/subscription pool + `VOLCENGINE_TTS_API_KEY` | Hongguo-style Chinese 3D AI motion-comic first frames + Grok video + Doubao speech |
+| **+ DashScope** | + `DASHSCOPE_API_KEY` | Wan/Qwen/HappyHorse/PixVerse/Kling(proxy)/Vidu(proxy) |
 | **+ MuleRun** | + `mulerun login` or `MULEROUTER_API_KEY` | + Seedance 2.0 + GPT-Image-2 |
 | **+ Kling Direct** | + `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` | Kling direct connection |
 | **+ Vidu Direct** | + `VIDU_API_KEY` | Vidu direct connection |
@@ -194,7 +206,7 @@ lumenx/
 │   ├── models/                # AI model adapters (Wanx/Kling/Vidu/MuleRouter)
 │   └── audio/                 # TTS voice synthesis
 ├── config/model_catalog/      # Model catalog (YAML → JSON)
-└── output/                    # Generated outputs (local storage)
+└── output/                    # Production truth synchronized through Git
 ```
 
 ---

@@ -64,12 +64,16 @@ Search tracked sensitive files:
 git ls-files | grep -E "\.env$|secret|credential|\.key$|\.pem$" | grep -v "\.example"
 ```
 
-## Step 3: Check .gitignore Coverage
+## Step 3: Check .gitignore Boundary
 
-Verify that `.gitignore` contains the expected sensitive and local paths:
+Verify that `.gitignore` covers sensitive/local paths while keeping production output visible:
 
 ```bash
-grep -E "^\.env|^\.agent|^CLAUDE\.md|^output/" .gitignore
+grep -E "^\.env|^\.agent|^CLAUDE\.md" .gitignore
+if grep -qE "^/?output(/|$)" .gitignore; then
+  echo "ERROR: output/ is cross-workstation production truth and must not be ignored"
+  exit 1
+fi
 ```
 
 Expected coverage includes:
@@ -77,7 +81,8 @@ Expected coverage includes:
 - `.env`
 - `.agent/`
 - `CLAUDE.md`
-- `output/`
+
+`output/` is explicitly excluded from this list: it must remain visible to Git, undergo the same secret scan as other tracked paths, and be committed as production truth.
 
 ## Step 4: Optional Quality Checks
 

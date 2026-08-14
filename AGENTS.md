@@ -66,6 +66,13 @@ If both Claude and Codex guidance exist, preserve behavior parity unless the use
 
 **Luoxia-Video** (落霞) is a novel-to-short-drama product. The short-drama spine is Luoxia contracts: **beats** own keep/drop content selection; **timeline** is the sole audio-first duration authority. The Next.js + FastAPI app is the human shell (script → beats review → cast/assets → storyboard → assembly). Do not brand this product as LumenX; upstream `alibaba/lumenx` is provenance only.
 
+## Production Defaults and Truth Sources
+
+- **语音**：主链固定使用豆包 Seed-TTS 2.0，唯一入口是 `src/luoxia/speech.py`，默认 `LUOXIA_TTS_PROVIDER=doubao`。音色、语速、音调与表演指令归 cast/audio 配置所有；Qwen3-TTS 与 xAI TTS 仅是显式兼容选项。
+- **视频**：主链固定使用 Grok `grok-imagine-video-1.5`。默认鉴权是 `session` + `xai_pool`，即 Grok 登录/订阅池；只有用户明确选择 `api_key` 模式时才读取 `XAI_API_KEY`。
+- **首帧**：固定为红果路线的国风精致 3D AI 漫剧，非真人写实，横屏 `16:9`。角色脸、年龄感、发型和服装以 cast 与身份/服装母图为真相源，不得套用固定的成年脸、男主脸或统一绿衣。
+- **产物同步**：`output/` 是跨工作站同步的生产真相，必须对 Git 可见；不得在 `.gitignore` 中忽略 `output/` 或其子目录。
+
 ## Short-Drama Generation Guardrails
 
 - 用户提供的成品提示词是该次生成的导演真相源。除替换已明确参数化的台词、首帧路径和实测音频时长外，不得擅自改写、扩写或加入 `slow`、`very slow`、`slow push-in`、`locked camera`、`subtle motion` 等导演指令。

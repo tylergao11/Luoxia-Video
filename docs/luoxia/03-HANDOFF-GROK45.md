@@ -27,7 +27,7 @@
 - 仓库根目录 `D:\Luoxia-Video`，git 已初始化，`upstream` 指向 `alibaba/lumenx`
 - 后端 Python（`requirements.txt` / `pyproject.toml`），前端 Next.js 在 `frontend/`
 - 仓库自带 `bin/ffmpeg`，优先用它，不要假设系统 PATH 里有 ffmpeg
-- 需要的凭据：订阅池登录，或 api_key 模式下的 `XAI_API_KEY`（Luoxia 图片 / 视频；session 也可供 LLM）。默认 TTS 为本地 Qwen3-TTS，不需要云密钥；仅旧 DashScope/默认 LLM 路径需要 `DASHSCOPE_API_KEY`。写进 `.env`，参考 `.env.example`。**任何情况下不得把密钥写进代码或提交**
+- 需要的凭据：默认通过 Grok 登录/订阅池（`session` + `xai_pool`）生成 Luoxia 图片/视频；只有显式切到 api_key 模式才需要 `XAI_API_KEY`。默认 TTS 为豆包 Seed-TTS 2.0，需要 `VOLCENGINE_TTS_API_KEY`；仅显式选择 DashScope 的旧工作流/模型才需要 `DASHSCOPE_API_KEY`。环境变量写进 `.env`，参考 `.env.example`。**任何情况下不得把密钥写进代码或提交**
 
 ## 3. 硬性禁令
 
@@ -139,7 +139,7 @@
 
 - 小步提交，一个任务一个或多个提交，提交信息说明**为什么**而不只是改了什么
 - 修改上游文件的提交单独拆出来，便于日后审计
-- 不提交 `.env`、密钥、`output/` 产物、模型权重
+- 不提交 `.env`、密钥或模型权重；`output/` 是需要跨工作站同步的生产真相，应正常提交，但其中不得混入凭据
 
 ## 9. 卡住了怎么办
 
